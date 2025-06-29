@@ -191,7 +191,10 @@ pub async fn generate_portfolio_summary(
                                 price_data.currency, portfolio_currency, e
                             ));
                             all_valid = false;
-                            debug!("Currency conversion error for {:?}: {}", investment.symbol, e);
+                            debug!(
+                                "Currency conversion error for {:?}: {}",
+                                investment.symbol, e
+                            );
                         }
                     }
                 }
