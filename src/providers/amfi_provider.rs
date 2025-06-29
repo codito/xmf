@@ -79,7 +79,7 @@ mod tests {
         status_code: u16,
     ) -> MockServer {
         let mock_server = MockServer::start().await;
-        let expected_path = format!("/nav/{}", isin);
+        let expected_path = format!("/nav/{isin}");
 
         Mock::given(method("GET"))
             .and(path(&expected_path))
