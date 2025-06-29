@@ -1,0 +1,8 @@
+# Rust specific ignores
+debug/
+target/
+**/*.rs.bk
+
+.aider*
+
+coverage.json
