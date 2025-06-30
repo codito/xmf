@@ -1,12 +1,12 @@
 use crate::config::Portfolio;
-use crate::currency_provider::CurrencyRateProvider; // Added import
+use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
 use anyhow::{Result, anyhow};
 use comfy_table::Table;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use std::collections::HashMap;
-use tracing::debug; // Added for logging
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub struct InvestmentSummary {
@@ -15,7 +15,7 @@ pub struct InvestmentSummary {
     pub current_price: Option<f64>,
     pub current_value: Option<f64>,
     pub currency: Option<String>,
-    pub converted_value: Option<f64>, // Added field for converted value
+    pub converted_value: Option<f64>,
     pub weight_pct: Option<f64>,
     pub error: Option<String>,
 }
@@ -24,7 +24,7 @@ pub struct InvestmentSummary {
 pub struct PortfolioSummary {
     pub name: String,
     pub total_value: Option<f64>,
-    pub converted_value: Option<f64>, // Added field for total converted value
+    pub converted_value: Option<f64>,
     pub currency: Option<String>,
     pub investments: Vec<InvestmentSummary>,
 }
@@ -47,7 +47,9 @@ impl PortfolioSummary {
             ]);
 
         for investment in &self.investments {
-            let units = investment.units.map_or("N/A".to_string(), |u| format!("{u:.2}"));
+            let units = investment
+                .units
+                .map_or("N/A".to_string(), |u| format!("{u:.2}"));
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
             let current_price = investment
                 .current_price
@@ -144,9 +146,7 @@ pub async fn generate_portfolio_summary(
 
         let (identifier, units, provider_to_use) = match investment {
             crate::config::Investment::Stock(s) => (s.symbol.clone(), s.units, symbol_provider),
-            crate::config::Investment::MutualFund(mf) => {
-                (mf.isin.clone(), mf.units, isin_provider)
-            }
+            crate::config::Investment::MutualFund(mf) => (mf.isin.clone(), mf.units, isin_provider),
             _ => unreachable!(),
         };
 
@@ -254,12 +254,10 @@ pub async fn generate_portfolio_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        FixedDepositInvestment, Investment, MutualFundInvestment, StockInvestment,
-    };
+    use crate::config::{FixedDepositInvestment, Investment, StockInvestment};
     use crate::currency_provider::CurrencyRateProvider;
     use crate::price_provider::PriceResult;
-    use anyhow::{anyhow, Result};
+    use anyhow::{Result, anyhow};
     use async_trait::async_trait;
     use std::collections::HashMap;
 
