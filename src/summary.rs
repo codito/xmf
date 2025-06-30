@@ -1,10 +1,10 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use comfy_table::Table;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::Table;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
@@ -66,18 +66,17 @@ impl PortfolioSummary {
                 .units
                 .map_or(style_for_display("N/A", "error"), |u| format!("{u:.2}"));
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
-            let current_price = investment.current_price.map_or(
-                style_for_display("N/A", "error"),
-                |p| format!("{p:.2}{currency}"),
-            );
-            let converted_value = investment.converted_value.map_or(
-                style_for_display("N/A", "error"),
-                |v| format!("{v:.2}"),
-            );
-            let weight_pct = investment.weight_pct.map_or(
-                style_for_display("N/A", "error"),
-                |w| format!("{w:.2}%"),
-            );
+            let current_price = investment
+                .current_price
+                .map_or(style_for_display("N/A", "error"), |p| {
+                    format!("{p:.2}{currency}")
+                });
+            let converted_value = investment
+                .converted_value
+                .map_or(style_for_display("N/A", "error"), |v| format!("{v:.2}"));
+            let weight_pct = investment
+                .weight_pct
+                .map_or(style_for_display("N/A", "error"), |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 &investment.symbol,
@@ -99,18 +98,16 @@ impl PortfolioSummary {
 
         // Portfolio name at top
         let mut output = format!("Portfolio: {}\n\n", style_for_display(&self.name, "title"));
-        
+
         // Table in the middle
         output.push_str(&table.to_string());
-        
+
         // Total value at bottom
-        output.push_str(
-            &format!(
-                "\n\nTotal Value ({}): {}",
-                style_for_display(target_currency, "total_label"),
-                style_for_display(&total_converted_value, total_style)
-            )
-        );
+        output.push_str(&format!(
+            "\n\nTotal Value ({}): {}",
+            style_for_display(target_currency, "total_label"),
+            style_for_display(&total_converted_value, total_style)
+        ));
 
         output
     }
@@ -151,15 +148,19 @@ pub async fn generate_and_display_summaries(
     for (i, sum) in summaries.into_iter().enumerate() {
         println!("{}", sum.display_as_table());
         if i < num_summaries - 1 {
-            let term_width =
-                console::Term::stdout().size_checked().map(|(_, w)| w as usize).unwrap_or(80);
+            let term_width = console::Term::stdout()
+                .size_checked()
+                .map(|(_, w)| w as usize)
+                .unwrap_or(80);
             println!("\n{}", "─".repeat(term_width));
         }
     }
 
     if all_portfolios_valid && num_summaries > 0 {
-        let term_width =
-            console::Term::stdout().size_checked().map(|(_, w)| w as usize).unwrap_or(80);
+        let term_width = console::Term::stdout()
+            .size_checked()
+            .map(|(_, w)| w as usize)
+            .unwrap_or(80);
         println!("\n{}", "=".repeat(term_width));
         let total_str = format!("Grand Total ({}): {:.2}", target_currency, grand_total);
         let styled_total = style(&total_str).bold().green();
