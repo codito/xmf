@@ -23,6 +23,19 @@ pub struct InvestmentSummary {
     pub error: Option<String>,
 }
 
+// Helper function for consistent styling
+fn style_for_display(text: &str, style_type: &str) -> String {
+    let styled = match style_type {
+        "title" => style(text).bold().underlined(),
+        "header" => style(text).cyan().bold(),
+        "total_label" => style(text).bold(),
+        "total_value" => style(text).green().bold(),
+        "error" => style(text).red(),
+        _ => style(text),
+    };
+    styled.to_string()
+}
+
 #[derive(Debug)]
 pub struct PortfolioSummary {
     pub name: String,
