@@ -5,12 +5,30 @@ use std::{fs, path::PathBuf};
 use tracing::debug;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Investment {
-    #[serde(default)]
-    pub symbol: Option<String>,
-    #[serde(default)]
-    pub isin: Option<String>,
+pub struct StockInvestment {
+    pub symbol: String,
     pub units: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct MutualFundInvestment {
+    pub isin: String,
+    pub units: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct FixedDepositInvestment {
+    pub name: String,
+    pub value: f64,
+    pub currency: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(untagged)]
+pub enum Investment {
+    Stock(StockInvestment),
+    MutualFund(MutualFundInvestment),
+    FixedDeposit(FixedDepositInvestment),
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -96,26 +114,59 @@ portfolios:
         units: 5.0
   - name: "Mutual Funds"
     investments:
-      - symbol: "MUTF_IN123"
+      - isin: "MUTF_IN123"
         units: 100.0
+  - name: "Bank Deposits"
+    investments:
+      - name: "FD with Bank of Rust"
+        value: 50000.0
+        currency: "INR"
+      - name: "FD without Currency"
+        value: 30000.0
 currency: "USD"
 "#;
 
         let config: AppConfig = serde_yaml::from_str(yaml_str).expect("Failed to deserialize");
-        assert_eq!(config.portfolios.len(), 2);
+        assert_eq!(config.portfolios.len(), 3);
         assert_eq!(config.portfolios[0].name, "Tech Stocks");
         assert_eq!(config.portfolios[0].investments.len(), 2);
-        assert_eq!(
-            config.portfolios[0].investments[0].symbol,
-            Some("AAPL".to_string())
-        );
-        assert_eq!(config.portfolios[0].investments[0].units, 10.5);
+        if let Investment::Stock(s) = &config.portfolios[0].investments[0] {
+            assert_eq!(s.symbol, "AAPL");
+            assert_eq!(s.units, 10.5);
+        } else {
+            panic!("Expected a stock investment");
+        }
+        if let Investment::Stock(s) = &config.portfolios[0].investments[1] {
+            assert_eq!(s.symbol, "MSFT");
+            assert_eq!(s.units, 5.0);
+        } else {
+            panic!("Expected a stock investment");
+        }
         assert_eq!(config.portfolios[1].name, "Mutual Funds");
-        assert_eq!(
-            config.portfolios[0].investments[1].symbol,
-            Some("MSFT".to_string())
-        );
-        assert_eq!(config.portfolios[0].investments[1].units, 5.0);
+        if let Investment::MutualFund(mf) = &config.portfolios[1].investments[0] {
+            assert_eq!(mf.isin, "MUTF_IN123");
+            assert_eq!(mf.units, 100.0);
+        } else {
+            panic!("Expected a mutual fund investment");
+        }
+
+        assert_eq!(config.portfolios[2].name, "Bank Deposits");
+        assert_eq!(config.portfolios[2].investments.len(), 2);
+        if let Investment::FixedDeposit(fd) = &config.portfolios[2].investments[0] {
+            assert_eq!(fd.name, "FD with Bank of Rust");
+            assert_eq!(fd.value, 50000.0);
+            assert_eq!(fd.currency.as_deref(), Some("INR"));
+        } else {
+            panic!("Expected a fixed deposit investment");
+        }
+        if let Investment::FixedDeposit(fd) = &config.portfolios[2].investments[1] {
+            assert_eq!(fd.name, "FD without Currency");
+            assert_eq!(fd.value, 30000.0);
+            assert!(fd.currency.is_none());
+        } else {
+            panic!("Expected a fixed deposit investment");
+        }
+
         assert!(config.providers.yahoo.is_some());
         assert_eq!(
             config.providers.yahoo.unwrap().base_url,

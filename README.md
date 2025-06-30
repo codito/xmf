@@ -5,6 +5,10 @@ A simple mutual funds and stocks tracker application written in Rust.
 ## Features
 
 - [x] Tracks multiple portfolios using a simple yaml based configuration
+- [x] Multiple investment types
+  - [x] Stocks
+  - [x] Mutual funds
+  - [x] Fixed deposits (manually updated)
 - [x] Supports multiple data backends
   - [x] Use Yahoo Finance! API tickers
   - [x] Use ISIN tickers for Indian Mutual Funds
