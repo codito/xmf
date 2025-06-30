@@ -116,6 +116,59 @@ impl PortfolioSummary {
     }
 }
 
+pub async fn generate_and_display_summaries(
+    portfolios: &[Portfolio],
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    target_currency: &str,
+) -> Result<()> {
+    let mut price_cache = HashMap::new();
+    let mut summaries = Vec::new();
+    let mut grand_total = 0.0;
+    let mut all_portfolios_valid = true;
+
+    for portfolio in portfolios {
+        let sum = generate_portfolio_summary(
+            portfolio,
+            symbol_provider,
+            isin_provider,
+            currency_provider,
+            &mut price_cache,
+            target_currency,
+        )
+        .await;
+
+        if let Some(value) = sum.converted_value {
+            grand_total += value;
+        } else {
+            all_portfolios_valid = false;
+        }
+        summaries.push(sum);
+    }
+
+    let num_summaries = summaries.len();
+    for (i, sum) in summaries.into_iter().enumerate() {
+        println!("{}", sum.display_as_table());
+        if i < num_summaries - 1 {
+            let term_width =
+                console::Term::stdout().size_checked().map(|(_, w)| w as usize).unwrap_or(80);
+            println!("\n{}", "─".repeat(term_width));
+        }
+    }
+
+    if all_portfolios_valid && num_summaries > 0 {
+        let term_width =
+            console::Term::stdout().size_checked().map(|(_, w)| w as usize).unwrap_or(80);
+        println!("\n{}", "=".repeat(term_width));
+        let total_str = format!("Grand Total ({}): {:.2}", target_currency, grand_total);
+        let styled_total = style(&total_str).bold().green();
+        println!("{:>width$}", styled_total, width = term_width);
+    }
+
+    Ok(())
+}
+
 pub async fn generate_portfolio_summary(
     portfolio: &Portfolio,
     symbol_provider: &(dyn PriceProvider + Send + Sync),
