@@ -43,7 +43,6 @@ impl PortfolioSummary {
                 "Price",
                 format!("Value ({target_currency})").as_ref(),
                 "Weight (%)",
-                "Error",
             ]);
 
         for investment in &self.investments {
@@ -60,7 +59,6 @@ impl PortfolioSummary {
             let weight_pct = investment
                 .weight_pct
                 .map_or("N/A".to_string(), |w| format!("{w:.2}%"));
-            let error = investment.error.as_deref().unwrap_or("").to_string();
 
             table.add_row(vec![
                 &investment.symbol,
@@ -68,7 +66,6 @@ impl PortfolioSummary {
                 &current_price,
                 &converted_value,
                 &weight_pct,
-                &error,
             ]);
         }
 
@@ -76,13 +73,22 @@ impl PortfolioSummary {
             .converted_value
             .map_or("N/A".to_string(), |v| format!("{v:.2}"));
 
-        let summary_text = format!(
-            "Portfolio: {} | Total Value ({}) : {}",
-            self.name, target_currency, total_converted_value
+        // Portfolio name at top
+        let mut output = format!("Portfolio: {}\n\n", self.name);
+        
+        // Table in the middle
+        output.push_str(&table.to_string());
+        
+        // Total value at bottom
+        output.push_str(
+            &format!(
+                "\n\nTotal Value ({}): {}",
+                target_currency,
+                total_converted_value
+            )
         );
 
-        let table_output = table.to_string();
-        format!("{table_output}\n\n{summary_text}")
+        output
     }
 }
 
