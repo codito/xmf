@@ -136,8 +136,7 @@ pub async fn generate_portfolio_summary(
                     }
                     Err(e) => {
                         investment_summary.error = Some(format!(
-                            "Currency conversion failed from {} to {}: {}",
-                            fd_currency, portfolio_currency, e
+                            "Currency conversion failed from {fd_currency} to {portfolio_currency}: {e}",
                         ));
                         all_valid = false;
                     }
