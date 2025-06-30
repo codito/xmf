@@ -113,17 +113,20 @@ pub async fn generate_portfolio_summary(
                 current_price: None,
                 current_value: Some(fd.value),
                 converted_value: None,
-                currency: Some(fd.currency.clone()),
+                currency: fd.currency.clone(),
                 weight_pct: None,
                 error: None,
             };
 
-            if fd.currency == portfolio_currency {
+            let fd_currency = fd.currency.as_deref().unwrap_or(portfolio_currency);
+            investment_summary.currency = Some(fd_currency.to_string());
+
+            if fd_currency == portfolio_currency {
                 total_converted_value += fd.value;
                 investment_summary.converted_value = Some(fd.value);
             } else {
                 match currency_provider
-                    .get_rate(&fd.currency, portfolio_currency)
+                    .get_rate(fd_currency, portfolio_currency)
                     .await
                 {
                     Ok(rate) => {
@@ -134,7 +137,7 @@ pub async fn generate_portfolio_summary(
                     Err(e) => {
                         investment_summary.error = Some(format!(
                             "Currency conversion failed from {} to {}: {}",
-                            fd.currency, portfolio_currency, e
+                            fd_currency, portfolio_currency, e
                         ));
                         all_valid = false;
                     }
@@ -569,17 +572,30 @@ mod tests {
         let isin_provider = MockProvider::new();
         let currency_provider = MockCurrencyProvider::new();
         let mut cache = HashMap::new();
-        let portfolio = Portfolio {
+
+        // Test with fixed deposit that specifies a currency
+        let portfolio_with_currency = Portfolio {
             name: "Bank".to_string(),
             investments: vec![Investment::FixedDeposit(FixedDepositInvestment {
                 name: "My FD".to_string(),
                 value: 5000.0,
-                currency: "INR".to_string(),
+                currency: Some("INR".to_string()),
             })],
         };
 
-        let summary = generate_portfolio_summary(
-            &portfolio,
+        // Test with fixed deposit that does not specify a currency
+        let portfolio_without_currency = Portfolio {
+            name: "Bank".to_string(),
+            investments: vec![Investment::FixedDeposit(FixedDepositInvestment {
+                name: "My FD".to_string(),
+                value: 6000.0,
+                currency: None,
+            })],
+        };
+
+        // Test portfolio with specified currency
+        let summary_with_currency = generate_portfolio_summary(
+            &portfolio_with_currency,
             &price_provider,
             &isin_provider,
             &currency_provider,
@@ -588,13 +604,84 @@ mod tests {
         )
         .await;
 
-        assert_eq!(summary.name, "Bank");
-        assert_eq!(summary.converted_value, Some(5000.0));
-        assert_eq!(summary.investments.len(), 1);
-        assert_eq!(summary.investments[0].symbol, "My FD");
-        assert_eq!(summary.investments[0].units, None);
-        assert_eq!(summary.investments[0].converted_value, Some(5000.0));
-        assert_eq!(summary.investments[0].weight_pct, Some(100.0));
+        assert_eq!(summary_with_currency.name, "Bank");
+        assert_eq!(summary_with_currency.converted_value, Some(5000.0));
+        assert_eq!(summary_with_currency.investments.len(), 1);
+        assert_eq!(summary_with_currency.investments[0].symbol, "My FD");
+        assert_eq!(summary_with_currency.investments[0].units, None);
+        assert_eq!(summary_with_currency.investments[0].converted_value, Some(5000.0));
+        assert_eq!(summary_with_currency.investments[0].currency, Some("INR".to_string()));
+        assert_eq!(summary_with_currency.investments[0].weight_pct, Some(100.0));
+
+        // Test portfolio without specified currency
+        let summary_without_currency = generate_portfolio_summary(
+            &portfolio_without_currency,
+            &price_provider,
+            &isin_provider,
+            &currency_provider,
+            &mut cache,
+            "INR",
+        )
+        .await;
+
+        assert_eq!(summary_without_currency.name, "Bank");
+        assert_eq!(summary_without_currency.converted_value, Some(6000.0));
+        assert_eq!(summary_without_currency.investments.len(), 1);
+        assert_eq!(summary_without_currency.investments[0].symbol, "My FD");
+        assert_eq!(summary_without_currency.investments[0].units, None);
+        assert_eq!(summary_without_currency.investments[0].converted_value, Some(6000.0));
+        assert_eq!(summary_without_currency.investments[0].currency, Some("INR".to_string()));
+        assert_eq!(summary_without_currency.investments[0].weight_pct, Some(100.0));
+
+        // Test with non-matching currency (should trigger conversion, but we have no rate so it should error)
+        currency_provider.rates.insert("USD:INR".to_string(), 80.0);
+        let portfolio_usd_fd = Portfolio {
+            name: "Bank".to_string(),
+            investments: vec![Investment::FixedDeposit(FixedDepositInvestment {
+                name: "USD FD".to_string(),
+                value: 100.0,
+                currency: Some("USD".to_string()),
+            })],
+        };
+
+        let summary_usd = generate_portfolio_summary(
+            &portfolio_usd_fd,
+            &price_provider,
+            &isin_provider,
+            &currency_provider,
+            &mut cache,
+            "INR",
+        )
+        .await;
+
+        assert_eq!(summary_usd.name, "Bank");
+        assert_eq!(summary_usd.converted_value, Some(8000.0));
+        assert_eq!(summary_usd.investments.len(), 1);
+        assert_eq!(summary_usd.investments[0].symbol, "USD FD");
+        assert_eq!(summary_usd.investments[0].units, None);
+        assert_eq!(summary_usd.investments[0].converted_value, Some(8000.0));
+        assert_eq!(summary_usd.investments[0].currency, Some("USD".to_string()));
+        assert_eq!(summary_usd.investments[0].weight_pct, Some(100.0));
+        assert_eq!(summary_usd.investments[0].error, None);
+
+        // Test with currency conversion error
+        let mut currency_provider_with_error = MockCurrencyProvider::new();
+        currency_provider_with_error.add_error("USD", "INR", "Rate unavailable");
+        let summary_error = generate_portfolio_summary(
+            &portfolio_usd_fd,
+            &price_provider,
+            &isin_provider,
+            &currency_provider_with_error,
+            &mut cache,
+            "INR",
+        )
+        .await;
+
+        assert!(summary_error.converted_value.is_none());
+        assert_eq!(
+            summary_error.investments[0].error,
+            Some("Currency conversion failed from USD to INR: Rate unavailable".to_string())
+        );
     }
 
     #[tokio::test]

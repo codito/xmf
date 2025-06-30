@@ -20,7 +20,7 @@ pub struct MutualFundInvestment {
 pub struct FixedDepositInvestment {
     pub name: String,
     pub value: f64,
-    pub currency: String,
+    pub currency: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -121,6 +121,8 @@ portfolios:
       - name: "FD with Bank of Rust"
         value: 50000.0
         currency: "INR"
+      - name: "FD without Currency"
+        value: 30000.0
 currency: "USD"
 "#;
 
@@ -149,10 +151,18 @@ currency: "USD"
         }
 
         assert_eq!(config.portfolios[2].name, "Bank Deposits");
+        assert_eq!(config.portfolios[2].investments.len(), 2);
         if let Investment::FixedDeposit(fd) = &config.portfolios[2].investments[0] {
             assert_eq!(fd.name, "FD with Bank of Rust");
             assert_eq!(fd.value, 50000.0);
-            assert_eq!(fd.currency, "INR");
+            assert_eq!(fd.currency.as_deref(), Some("INR"));
+        } else {
+            panic!("Expected a fixed deposit investment");
+        }
+        if let Investment::FixedDeposit(fd) = &config.portfolios[2].investments[1] {
+            assert_eq!(fd.name, "FD without Currency");
+            assert_eq!(fd.value, 30000.0);
+            assert!(fd.currency.is_none());
         } else {
             panic!("Expected a fixed deposit investment");
         }
