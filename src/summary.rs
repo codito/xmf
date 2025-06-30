@@ -570,7 +570,7 @@ mod tests {
     async fn test_fixed_deposit_investment() {
         let price_provider = MockProvider::new();
         let isin_provider = MockProvider::new();
-        let currency_provider = MockCurrencyProvider::new();
+        let mut currency_provider = MockCurrencyProvider::new();
         let mut cache = HashMap::new();
 
         // Test with fixed deposit that specifies a currency
@@ -609,8 +609,14 @@ mod tests {
         assert_eq!(summary_with_currency.investments.len(), 1);
         assert_eq!(summary_with_currency.investments[0].symbol, "My FD");
         assert_eq!(summary_with_currency.investments[0].units, None);
-        assert_eq!(summary_with_currency.investments[0].converted_value, Some(5000.0));
-        assert_eq!(summary_with_currency.investments[0].currency, Some("INR".to_string()));
+        assert_eq!(
+            summary_with_currency.investments[0].converted_value,
+            Some(5000.0)
+        );
+        assert_eq!(
+            summary_with_currency.investments[0].currency,
+            Some("INR".to_string())
+        );
         assert_eq!(summary_with_currency.investments[0].weight_pct, Some(100.0));
 
         // Test portfolio without specified currency
@@ -629,9 +635,18 @@ mod tests {
         assert_eq!(summary_without_currency.investments.len(), 1);
         assert_eq!(summary_without_currency.investments[0].symbol, "My FD");
         assert_eq!(summary_without_currency.investments[0].units, None);
-        assert_eq!(summary_without_currency.investments[0].converted_value, Some(6000.0));
-        assert_eq!(summary_without_currency.investments[0].currency, Some("INR".to_string()));
-        assert_eq!(summary_without_currency.investments[0].weight_pct, Some(100.0));
+        assert_eq!(
+            summary_without_currency.investments[0].converted_value,
+            Some(6000.0)
+        );
+        assert_eq!(
+            summary_without_currency.investments[0].currency,
+            Some("INR".to_string())
+        );
+        assert_eq!(
+            summary_without_currency.investments[0].weight_pct,
+            Some(100.0)
+        );
 
         // Test with non-matching currency (should trigger conversion, but we have no rate so it should error)
         currency_provider.rates.insert("USD:INR".to_string(), 80.0);
@@ -703,7 +718,7 @@ mod tests {
                 Investment::FixedDeposit(FixedDepositInvestment {
                     name: "My FD".to_string(),
                     value: 40000.0, // 40000 INR
-                    currency: "INR".to_string(),
+                    currency: Some("INR".to_string()),
                 }),
             ],
         };
