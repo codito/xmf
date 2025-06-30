@@ -1,10 +1,10 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{Result, anyhow};
-use comfy_table::Table;
+use anyhow::{anyhow, Result};
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
+use comfy_table::{Attribute, Cell, Color, Table};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
@@ -27,7 +27,6 @@ pub struct InvestmentSummary {
 fn style_for_display(text: &str, style_type: &str) -> String {
     let styled = match style_type {
         "title" => style(text).bold().underlined(),
-        "header" => style(text).cyan().bold(),
         "total_label" => style(text).bold(),
         "total_value" => style(text).green().bold(),
         "error" => style(text).red(),
@@ -54,36 +53,53 @@ impl PortfolioSummary {
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_header(vec![
-                style_for_display("Symbol", "header"),
-                style_for_display("Units", "header"),
-                style_for_display("Price", "header"),
-                style_for_display(&format!("Value ({target_currency})"), "header"),
-                style_for_display("Weight (%)", "header"),
+                Cell::new("Symbol")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Units")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Price")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new(&format!("Value ({target_currency})"))
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
+                Cell::new("Weight (%)")
+                    .fg(Color::Cyan)
+                    .add_attribute(Attribute::Bold),
             ]);
 
         for investment in &self.investments {
             let units = investment
                 .units
-                .map_or(style_for_display("N/A", "error"), |u| format!("{u:.2}"));
-            let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
-            let current_price = investment
-                .current_price
-                .map_or(style_for_display("N/A", "error"), |p| {
-                    format!("{p:.2}{currency}")
+                .map_or(Cell::new("N/A").fg(Color::Red), |u| {
+                    Cell::new(format!("{u:.2}"))
                 });
-            let converted_value = investment
-                .converted_value
-                .map_or(style_for_display("N/A", "error"), |v| format!("{v:.2}"));
-            let weight_pct = investment
-                .weight_pct
-                .map_or(style_for_display("N/A", "error"), |w| format!("{w:.2}%"));
+            let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
+            let current_price =
+                investment
+                    .current_price
+                    .map_or(Cell::new("N/A").fg(Color::Red), |p| {
+                        Cell::new(format!("{p:.2}{currency}"))
+                    });
+            let converted_value =
+                investment
+                    .converted_value
+                    .map_or(Cell::new("N/A").fg(Color::Red), |v| {
+                        Cell::new(format!("{v:.2}"))
+                    });
+            let weight_pct = investment.weight_pct.map_or(
+                Cell::new("N/A").fg(Color::Red),
+                |w| Cell::new(format!("{w:.2}%")),
+            );
 
             table.add_row(vec![
-                &investment.symbol,
-                &units,
-                &current_price,
-                &converted_value,
-                &weight_pct,
+                Cell::new(&investment.symbol),
+                units,
+                current_price,
+                converted_value,
+                weight_pct,
             ]);
         }
 
