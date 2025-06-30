@@ -1,11 +1,14 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{Result, anyhow};
-use comfy_table::Table;
+use anyhow::{anyhow, Result};
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
+use comfy_table::Table;
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -38,27 +41,30 @@ impl PortfolioSummary {
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_header(vec![
-                "Symbol",
-                "Units",
-                "Price",
-                format!("Value ({target_currency})").as_ref(),
-                "Weight (%)",
+                style_for_display("Symbol", "header"),
+                style_for_display("Units", "header"),
+                style_for_display("Price", "header"),
+                style_for_display(&format!("Value ({target_currency})"), "header"),
+                style_for_display("Weight (%)", "header"),
             ]);
 
         for investment in &self.investments {
             let units = investment
                 .units
-                .map_or("N/A".to_string(), |u| format!("{u:.2}"));
+                .map_or(style_for_display("N/A", "error"), |u| format!("{u:.2}"));
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
-            let current_price = investment
-                .current_price
-                .map_or("N/A".to_string(), |p| format!("{p:.2}{currency}"));
-            let converted_value = investment
-                .converted_value
-                .map_or("N/A".to_string(), |v| format!("{v:.2}"));
-            let weight_pct = investment
-                .weight_pct
-                .map_or("N/A".to_string(), |w| format!("{w:.2}%"));
+            let current_price = investment.current_price.map_or(
+                style_for_display("N/A", "error"),
+                |p| format!("{p:.2}{currency}"),
+            );
+            let converted_value = investment.converted_value.map_or(
+                style_for_display("N/A", "error"),
+                |v| format!("{v:.2}"),
+            );
+            let weight_pct = investment.weight_pct.map_or(
+                style_for_display("N/A", "error"),
+                |w| format!("{w:.2}%"),
+            );
 
             table.add_row(vec![
                 &investment.symbol,
@@ -69,12 +75,17 @@ impl PortfolioSummary {
             ]);
         }
 
+        let total_style = if self.converted_value.is_some() {
+            "total_value"
+        } else {
+            "error"
+        };
         let total_converted_value = self
             .converted_value
             .map_or("N/A".to_string(), |v| format!("{v:.2}"));
 
         // Portfolio name at top
-        let mut output = format!("Portfolio: {}\n\n", self.name);
+        let mut output = format!("Portfolio: {}\n\n", style_for_display(&self.name, "title"));
         
         // Table in the middle
         output.push_str(&table.to_string());
@@ -83,8 +94,8 @@ impl PortfolioSummary {
         output.push_str(
             &format!(
                 "\n\nTotal Value ({}): {}",
-                target_currency,
-                total_converted_value
+                style_for_display(target_currency, "total_label"),
+                style_for_display(&total_converted_value, total_style)
             )
         );
 
@@ -100,6 +111,18 @@ pub async fn generate_portfolio_summary(
     price_cache: &mut HashMap<String, Result<PriceResult, String>>,
     portfolio_currency: &str,
 ) -> PortfolioSummary {
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(120));
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.blue} {msg}")
+            .unwrap(),
+    );
+    spinner.set_message(format!(
+        "Fetching data for portfolio '{}'...",
+        portfolio.name
+    ));
+
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
         total_value: None,
@@ -255,6 +278,8 @@ pub async fn generate_portfolio_summary(
         summary.converted_value = None;
         summary.total_value = None; // Reset original total_value too if any error
     }
+
+    spinner.finish_and_clear();
 
     summary
 }
