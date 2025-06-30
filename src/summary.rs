@@ -1,7 +1,7 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
 use comfy_table::{Attribute, Cell, Color, Table};
@@ -58,9 +58,7 @@ impl PortfolioSummary {
         };
         // Helper to format an optional value into a cell, or return "N/A"
         fn format_optional<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
-            value.map_or(Cell::new("N/A").fg(Color::Red), |v| {
-                Cell::new(format_fn(v))
-            })
+            value.map_or(Cell::new("N/A").fg(Color::Red), |v| Cell::new(format_fn(v)))
         }
 
         table
@@ -168,9 +166,9 @@ pub async fn generate_and_display_summaries(
             .map(|(_, w)| w as usize)
             .unwrap_or(80);
         println!("\n{}", "=".repeat(term_width));
-        let total_str = format!("Grand Total ({}): {:.2}", target_currency, grand_total);
+        let total_str = format!("Grand Total ({target_currency}): {grand_total:.2}");
         let styled_total = style(&total_str).bold().green();
-        println!("{:>width$}", styled_total, width = term_width);
+        println!("{styled_total:>term_width$}");
     }
 
     Ok(())
@@ -185,7 +183,7 @@ pub async fn generate_portfolio_summary(
     portfolio_currency: &str,
 ) -> PortfolioSummary {
     let spinner = ProgressBar::new_spinner();
-    spinner.enable_steady_tick(Duration::from_millis(120));
+    spinner.enable_steady_tick(Duration::from_millis(100));
     spinner.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner:.blue} {msg}")
