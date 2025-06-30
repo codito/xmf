@@ -49,50 +49,40 @@ impl PortfolioSummary {
         let target_currency = self.currency.as_deref().unwrap_or("N/A");
 
         let mut table = Table::new();
+
+        // Helper to create a styled header cell
+        let header_cell = |text: &str| {
+            Cell::new(text)
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold)
+        };
+        // Helper to format an optional value into a cell, or return "N/A"
+        fn format_optional<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
+            value.map_or(Cell::new("N/A").fg(Color::Red), |v| {
+                Cell::new(format_fn(v))
+            })
+        }
+
         table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_header(vec![
-                Cell::new("Symbol")
-                    .fg(Color::Cyan)
-                    .add_attribute(Attribute::Bold),
-                Cell::new("Units")
-                    .fg(Color::Cyan)
-                    .add_attribute(Attribute::Bold),
-                Cell::new("Price")
-                    .fg(Color::Cyan)
-                    .add_attribute(Attribute::Bold),
-                Cell::new(&format!("Value ({target_currency})"))
-                    .fg(Color::Cyan)
-                    .add_attribute(Attribute::Bold),
-                Cell::new("Weight (%)")
-                    .fg(Color::Cyan)
-                    .add_attribute(Attribute::Bold),
+                header_cell("Symbol"),
+                header_cell("Units"),
+                header_cell("Price"),
+                header_cell(&format!("Value ({target_currency})")),
+                header_cell("Weight (%)"),
             ]);
 
         for investment in &self.investments {
-            let units = investment
-                .units
-                .map_or(Cell::new("N/A").fg(Color::Red), |u| {
-                    Cell::new(format!("{u:.2}"))
-                });
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
+
+            let units = format_optional(investment.units, |u| format!("{u:.2}"));
             let current_price =
-                investment
-                    .current_price
-                    .map_or(Cell::new("N/A").fg(Color::Red), |p| {
-                        Cell::new(format!("{p:.2}{currency}"))
-                    });
+                format_optional(investment.current_price, |p| format!("{p:.2}{currency}"));
             let converted_value =
-                investment
-                    .converted_value
-                    .map_or(Cell::new("N/A").fg(Color::Red), |v| {
-                        Cell::new(format!("{v:.2}"))
-                    });
-            let weight_pct = investment.weight_pct.map_or(
-                Cell::new("N/A").fg(Color::Red),
-                |w| Cell::new(format!("{w:.2}%")),
-            );
+                format_optional(investment.converted_value, |v| format!("{v:.2}"));
+            let weight_pct = format_optional(investment.weight_pct, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 Cell::new(&investment.symbol),
