@@ -1,12 +1,11 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::{PriceProvider, PriceResult};
+use crate::price_provider::PriceProvider;
 use crate::ui;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
-use std::collections::HashMap;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -336,7 +335,7 @@ mod tests {
     use crate::config::{FixedDepositInvestment, Investment, StockInvestment};
     use crate::currency_provider::CurrencyRateProvider;
     use crate::price_provider::{PriceProvider, PriceResult};
-    use anyhow::{anyhow, Result};
+    use anyhow::{Result, anyhow};
     use async_trait::async_trait;
     use std::collections::HashMap;
 
@@ -358,7 +357,8 @@ mod tests {
         }
 
         fn add_error(&mut self, symbol: &str, error_msg: &str) {
-            self.errors.insert(symbol.to_string(), error_msg.to_string());
+            self.errors
+                .insert(symbol.to_string(), error_msg.to_string());
         }
     }
 
@@ -730,10 +730,7 @@ mod tests {
         assert_eq!(summary_usd.investments[0].symbol, "USD FD");
         assert_eq!(summary_usd.investments[0].units, None);
         assert_eq!(summary_usd.investments[0].converted_value, Some(8000.0));
-        assert_eq!(
-            summary_usd.investments[0].currency,
-            Some("USD".to_string())
-        );
+        assert_eq!(summary_usd.investments[0].currency, Some("USD".to_string()));
         assert_eq!(summary_usd.investments[0].weight_pct, Some(100.0));
         assert_eq!(summary_usd.investments[0].error, None);
 
