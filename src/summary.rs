@@ -153,13 +153,9 @@ pub async fn generate_and_display_summaries(
     let mut all_portfolios_valid = true;
 
     for portfolio in portfolios {
-        let sum = generate_portfolio_summary(
-            portfolio,
-            currency_provider,
-            &price_cache,
-            target_currency,
-        )
-        .await;
+        let sum =
+            generate_portfolio_summary(portfolio, currency_provider, &price_cache, target_currency)
+                .await;
 
         if let Some(value) = sum.converted_value {
             grand_total += value;
@@ -264,7 +260,10 @@ pub async fn generate_portfolio_summary(
                 Ok(pr) => Ok(pr.clone()),
                 Err(e) => Err(anyhow!(e.clone())),
             },
-            None => Err(anyhow!("Price for {} not found in cache. This is a bug.", identifier)),
+            None => Err(anyhow!(
+                "Price for {} not found in cache. This is a bug.",
+                identifier
+            )),
         };
 
         let mut investment_summary = InvestmentSummary {
@@ -469,13 +468,8 @@ mod tests {
                 units: 10.0,
             })],
         };
-        let summary = generate_portfolio_summary(
-            &portfolio,
-            &currency_provider,
-            &price_cache,
-            "USD",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio, &currency_provider, &price_cache, "USD").await;
 
         assert_eq!(summary.name, "Tech");
         assert_eq!(summary.total_value, Some(1500.0));
@@ -500,10 +494,7 @@ mod tests {
                 historical: HashMap::new(),
             }),
         );
-        price_cache.insert(
-            "MSFT".to_string(),
-            Err("API unavailable".to_string()),
-        );
+        price_cache.insert("MSFT".to_string(), Err("API unavailable".to_string()));
 
         let portfolio = Portfolio {
             name: "Tech".to_string(),
@@ -519,19 +510,14 @@ mod tests {
             ],
         };
 
-        let summary = generate_portfolio_summary(
-            &portfolio,
-            &currency_provider,
-            &price_cache,
-            "USD",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio, &currency_provider, &price_cache, "USD").await;
 
         assert!(summary.converted_value.is_none());
         assert_eq!(summary.investments[0].error, None);
         assert_eq!(
             summary.investments[1].error.as_deref(),
-            Some("API unavailable".to_string())
+            Some("API unavailable")
         );
         assert!(summary.investments[0].converted_value.is_some());
         assert!(summary.investments[1].converted_value.is_none());
@@ -572,13 +558,8 @@ mod tests {
             ],
         };
 
-        let summary = generate_portfolio_summary(
-            &portfolio,
-            &currency_provider,
-            &price_cache,
-            "USD",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio, &currency_provider, &price_cache, "USD").await;
 
         assert_eq!(summary.name, "Diversified");
         assert_eq!(summary.converted_value, Some(2250.0));
@@ -634,13 +615,8 @@ mod tests {
             ],
         };
 
-        let summary = generate_portfolio_summary(
-            &portfolio,
-            &currency_provider,
-            &price_cache,
-            "USD",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio, &currency_provider, &price_cache, "USD").await;
 
         assert!(summary.converted_value.is_none());
         assert_eq!(summary.investments[0].error, None);
@@ -677,13 +653,8 @@ mod tests {
 
         // The first call populates the cache. The second call should use it.
         // With the refactoring, we just test that a pre-populated cache is used.
-        let summary = generate_portfolio_summary(
-            &portfolio2,
-            &currency_provider,
-            &price_cache,
-            "USD",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio2, &currency_provider, &price_cache, "USD").await;
 
         assert_eq!(summary.investments[0].current_value, Some(750.0));
         assert_eq!(summary.investments[0].converted_value, Some(750.0));
@@ -777,13 +748,9 @@ mod tests {
             })],
         };
 
-        let summary_usd = generate_portfolio_summary(
-            &portfolio_usd_fd,
-            &currency_provider,
-            &price_cache,
-            "INR",
-        )
-        .await;
+        let summary_usd =
+            generate_portfolio_summary(&portfolio_usd_fd, &currency_provider, &price_cache, "INR")
+                .await;
 
         assert_eq!(summary_usd.name, "Bank");
         assert_eq!(summary_usd.converted_value, Some(8000.0));
@@ -842,13 +809,8 @@ mod tests {
             ],
         };
 
-        let summary = generate_portfolio_summary(
-            &portfolio,
-            &currency_provider,
-            &price_cache,
-            "INR",
-        )
-        .await;
+        let summary =
+            generate_portfolio_summary(&portfolio, &currency_provider, &price_cache, "INR").await;
 
         // AAPL value in INR = 10 * 200 * 80 = 160000 INR
         // FD value in INR = 40000 INR
