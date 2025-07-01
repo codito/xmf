@@ -1,11 +1,13 @@
+use crate::cache::Cache;
 use crate::config::{AppConfig, Investment};
-use crate::price_provider::{HistoricalPeriod, PriceProvider};
+use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 use crate::ui;
 use anyhow::Result;
 use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Clone)]
 struct ChangeResult {
@@ -19,6 +21,8 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         Some(path) => AppConfig::load_from_path(path)?,
         None => AppConfig::load()?,
     };
+
+    let price_cache = Arc::new(Cache::<String, PriceResult>::new());
 
     let base_url = config
         .providers
@@ -34,8 +38,10 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         .map(|c| c.base_url.as_str())
         .unwrap_or("https://mf.captnemo.in");
 
-    let stock_provider = crate::providers::yahoo_finance::YahooFinanceProvider::new(base_url);
-    let mf_provider = crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url);
+    let stock_provider =
+        crate::providers::yahoo_finance::YahooFinanceProvider::new(base_url, Arc::clone(&price_cache));
+    let mf_provider =
+        crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url, Arc::clone(&price_cache));
 
     let mut investments_to_fetch = HashMap::new();
     for portfolio in &config.portfolios {
