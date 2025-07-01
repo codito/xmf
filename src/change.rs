@@ -38,8 +38,10 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         .map(|c| c.base_url.as_str())
         .unwrap_or("https://mf.captnemo.in");
 
-    let stock_provider =
-        crate::providers::yahoo_finance::YahooFinanceProvider::new(base_url, Arc::clone(&price_cache));
+    let stock_provider = crate::providers::yahoo_finance::YahooFinanceProvider::new(
+        base_url,
+        Arc::clone(&price_cache),
+    );
     let mf_provider =
         crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url, Arc::clone(&price_cache));
 

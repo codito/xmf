@@ -223,11 +223,7 @@ mod tests {
 
         let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
         assert!(
-            (result
-                .historical
-                .get(&HistoricalPeriod::OneMonth)
-                .unwrap()
-                - expected_change_1m)
+            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
                 .abs()
                 < 0.001
         );
