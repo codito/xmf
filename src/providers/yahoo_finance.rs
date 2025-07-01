@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{self, Duration, Utc};
+use chrono::{Duration, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tracing::{debug, instrument};
@@ -15,7 +15,7 @@ fn find_closest_price(
 ) -> Option<f64> {
     timestamps
         .iter()
-        .position(|&ts| *ts >= target_ts)
+        .position(|ts| *ts >= target_ts)
         .and_then(|index| prices.get(index).and_then(|p| *p))
 }
 

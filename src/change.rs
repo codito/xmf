@@ -118,12 +118,12 @@ fn display_results(results: &[ChangeResult]) {
     table.set_header(header);
 
     for result in results {
-        let mut row = vec![Cell::new(&result.identifier)];
+        let mut row_cells = vec![Cell::new(&result.identifier)];
+        let mut span: Option<(usize, usize)> = None;
+
         if let Some(e) = &result.error {
-            let error_cell = Cell::new(format!("Error: {e}"))
-                .set_col_span(periods.len())
-                .fg(Color::Red);
-            row.push(error_cell);
+            row_cells.push(Cell::new(format!("Error: {e}")).fg(Color::Red));
+            span = Some((1, periods.len()));
         } else {
             for period in &periods {
                 match result.changes.get(period) {
@@ -133,13 +133,16 @@ fn display_results(results: &[ChangeResult]) {
                         } else {
                             Cell::new(format!("{change:.2}%")).fg(Color::Red)
                         };
-                        row.push(cell);
+                        row_cells.push(cell);
                     }
-                    None => row.push(Cell::new("N/A").fg(Color::DarkGrey)),
+                    None => row_cells.push(Cell::new("N/A").fg(Color::DarkGrey)),
                 }
             }
         }
-        table.add_row(row);
+        let mut row = table.add_row(row_cells);
+        if let Some((index, span_width)) = span {
+            row.set_cell_span(index, span_width);
+        }
     }
 
     println!("{table}");
