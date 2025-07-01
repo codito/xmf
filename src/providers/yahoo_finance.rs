@@ -209,7 +209,7 @@ mod tests {
     // Tests for YahooFinanceProvider (PriceProvider)
     pub async fn create_mock_server(
         symbol: &str,
-        mock_response: &'static str,
+        mock_response: &str,
     ) -> wiremock::MockServer {
         let mock_server = wiremock::MockServer::start().await;
         let request_path = format!("/v8/finance/chart/{symbol}");
@@ -242,6 +242,62 @@ mod tests {
         let result = provider.fetch_price("AAPL").await.unwrap();
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
+        assert!(result.historical.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_successful_price_fetch_with_historical_data() {
+        let now = chrono::Utc::now();
+        let ts_5y = (now - chrono::Duration::days(365 * 5 - 10)).timestamp();
+        let p_5y = 100.0;
+        let ts_3y = (now - chrono::Duration::days(365 * 3 - 10)).timestamp();
+        let p_3y = 110.0;
+        let ts_1y = (now - chrono::Duration::days(365 - 10)).timestamp();
+        let p_1y = 120.0;
+        let ts_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2)).timestamp();
+        let p_1m = 130.0;
+        let ts_1w = (now - chrono::Duration::weeks(1) + chrono::Duration::days(2)).timestamp();
+        let p_1w = 140.0;
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 150.65,
+                            "currency": "USD"
+                        }},
+                        "timestamp": [{}, {}, {}, {}, {}],
+                        "indicators": {{
+                            "quote": [{{
+                                "close": [{}, {}, {}, {}, {}]
+                            }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+            ts_5y, ts_3y, ts_1y, ts_1m, ts_1w, p_5y, p_3y, p_1y, p_1m, p_1w
+        );
+
+        let mock_server = create_mock_server("AAPL", &mock_response).await;
+
+        let provider = YahooFinanceProvider::new(&mock_server.uri());
+        let result = provider.fetch_price("AAPL").await.unwrap();
+
+        assert_eq!(result.price, 150.65);
+        assert_eq!(result.currency, "USD");
+        assert_eq!(result.historical.len(), 5);
+        assert_eq!(
+            result.historical.get(&HistoricalPeriod::FiveYears),
+            Some(&p_5y)
+        );
+        assert_eq!(
+            result.historical.get(&HistoricalPeriod::ThreeYears),
+            Some(&p_3y)
+        );
+        assert_eq!(result.historical.get(&HistoricalPeriod::OneYear), Some(&p_1y));
+        assert_eq!(result.historical.get(&HistoricalPeriod::OneMonth), Some(&p_1m));
+        assert_eq!(result.historical.get(&HistoricalPeriod::OneWeek), Some(&p_1w));
     }
 
     #[tokio::test]
