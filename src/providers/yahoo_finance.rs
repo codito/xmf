@@ -298,7 +298,7 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "USD");
-        assert_eq!(result.historical.len(), 4); // 5Y, 1Y, 1M, 5D
+        assert_eq!(result.historical.len(), 6); // 10Y, 5Y, 3Y, 1Y, 1M, 5D
 
         let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
         assert!(
@@ -306,10 +306,24 @@ mod tests {
                 .abs()
                 < 0.001
         );
+        assert!(
+            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_5y)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_1y = ((current_price - p_1y) / p_1y) * 100.0;
         assert!(
             (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+                < 0.001
+        );
+        assert!(
+            (result
+                .historical
+                .get(&HistoricalPeriod::ThreeYears)
+                .unwrap()
+                - expected_change_1y)
+                .abs()
                 < 0.001
         );
 

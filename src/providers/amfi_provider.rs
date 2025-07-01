@@ -178,7 +178,7 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "INR");
-        assert_eq!(result.historical.len(), 4);
+        assert_eq!(result.historical.len(), 6);
 
         let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
         assert!(
@@ -186,10 +186,42 @@ mod tests {
                 .abs()
                 < 0.001
         );
+        assert!(
+            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_5y)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
         assert!(
             (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+                < 0.001
+        );
+        assert!(
+            (result
+                .historical
+                .get(&HistoricalPeriod::ThreeYears)
+                .unwrap()
+                - expected_change_1y)
+                .abs()
+                < 0.001
+        );
+
+        let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
+        assert!(
+            (result
+                .historical
+                .get(&HistoricalPeriod::OneMonth)
+                .unwrap()
+                - expected_change_1m)
+                .abs()
+                < 0.001
+        );
+
+        let expected_change_5d = ((current_price - price_5d) / price_5d) * 100.0;
+        assert!(
+            (result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
+                .abs()
                 < 0.001
         );
     }
@@ -218,10 +250,8 @@ mod tests {
         let result = provider.fetch_price(isin).await.unwrap();
 
         // 1D, 5D are missing as the closest data is >1 month old
-        // 5Y, 3Y will resolve to the 1Y price. 1Y and 1M will resolve to their respective prices.
-        assert_eq!(result.historical.len(), 4);
-        assert!(result.historical.contains_key(&HistoricalPeriod::OneDay));
-        assert!(result.historical.contains_key(&HistoricalPeriod::FiveDays));
+        // 10Y, 5Y, 3Y will resolve to the 1Y price. 1Y and 1M will resolve to their respective prices.
+        assert_eq!(result.historical.len(), 5);
 
         let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
         assert!(
@@ -246,6 +276,11 @@ mod tests {
         );
         assert!(
             (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_1y)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_1y)
                 .abs()
                 < 0.001
         );
