@@ -368,48 +368,6 @@ mod tests {
     use async_trait::async_trait;
     use std::collections::HashMap;
 
-    // MockProvider for PriceProvider remains the same
-    struct MockProvider {
-        responses: HashMap<String, Result<PriceResult>>,
-    }
-
-    impl MockProvider {
-        fn new() -> Self {
-            MockProvider {
-                responses: HashMap::new(),
-            }
-        }
-
-        fn add_response(&mut self, symbol: &str, price: f64, currency: &str) {
-            self.responses.insert(
-                symbol.to_string(),
-                Ok(PriceResult {
-                    price,
-                    currency: currency.to_string(),
-                    historical: HashMap::new(),
-                }),
-            );
-        }
-
-        fn add_error(&mut self, symbol: &str, error: &str) {
-            self.responses
-                .insert(symbol.to_string(), Err(anyhow!(error.to_string())));
-        }
-    }
-
-    #[async_trait]
-    impl PriceProvider for MockProvider {
-        async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
-            match self.responses.get(symbol) {
-                Some(result) => match result {
-                    Ok(response) => Ok(response.clone()),
-                    Err(e) => Err(anyhow!("{e:?}")),
-                },
-                None => Err(anyhow!("Symbol not found")),
-            }
-        }
-    }
-
     // MockCurrencyProvider for CurrencyRateProvider
     struct MockCurrencyProvider {
         rates: HashMap<String, f64>,
