@@ -45,7 +45,7 @@ struct Quote {
 struct PriceChartItem {
     meta: PriceChartMeta,
     timestamp: Option<Vec<i64>>,
-    indicators: Indicators,
+    indicators: Option<Indicators>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -88,7 +88,10 @@ impl PriceProvider for YahooFinanceProvider {
         // Extract timestamps and prices if available
         if let (Some(timestamps), Some(closes)) = (
             item.timestamp.as_ref(),
-            item.indicators.quote.get(0).and_then(|q| q.close.as_ref()),
+            item.indicators
+                .as_ref()
+                .and_then(|inds| inds.quote.get(0))
+                .and_then(|q| q.close.as_ref()),
         ) {
             // Create vector of (timestamp, price) for non-empty prices
             let prices: Vec<_> = timestamps
