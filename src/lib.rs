@@ -23,24 +23,27 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         .providers
         .yahoo
         .as_ref()
-        .map(|c| c.base_url.as_str())
-        .unwrap_or("https://query1.finance.yahoo.com");
+        .map_or("https://query1.finance.yahoo.com", |p| &p.base_url);
+    let symbol_provider = crate::providers::caching::CachingPriceProvider::new(
+        crate::providers::yahoo_finance::YahooFinanceProvider::new(base_url),
+    );
+    let currency_provider = crate::providers::caching::CachingCurrencyRateProvider::new(
+        crate::providers::yahoo_finance::YahooCurrencyProvider::new(base_url),
+    );
 
     let amfi_base_url = config
         .providers
         .amfi
         .as_ref()
-        .map(|c| c.base_url.as_str())
-        .unwrap_or("https://mf.captnemo.in");
-
-    let provider = crate::providers::yahoo_finance::YahooFinanceProvider::new(base_url);
-    let amfi_provider = crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url);
-    let currency_provider = crate::providers::yahoo_finance::YahooCurrencyProvider::new(base_url);
+        .map_or("https://mf.captnemo.in", |p| &p.base_url);
+    let isin_provider = crate::providers::caching::CachingPriceProvider::new(
+        crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url),
+    );
 
     summary::generate_and_display_summaries(
         &config.portfolios,
-        &provider,
-        &amfi_provider,
+        &symbol_provider,
+        &isin_provider,
         &currency_provider,
         &config.currency,
     )
