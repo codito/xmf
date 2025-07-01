@@ -50,7 +50,7 @@ impl PriceProvider for YahooFinanceProvider {
         fields(symbol = %symbol)
     )]
     async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
-        let url = format!("{}/v8/finance/chart/{}", self.base_url, symbol);
+        let url = format!("{}/v8/finance/chart/{}?interval=1d&range=10y", self.base_url, symbol);
         debug!("Requesting price data from {}", url);
 
         let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
@@ -62,17 +62,50 @@ impl PriceProvider for YahooFinanceProvider {
 
         debug!(response = ?response, "Received Yahoo response");
 
-        response
-            .json::<YahooPriceResponse>()
-            .await?
-            .chart
-            .result
+        let data = response.json::<YahooPriceResponse>().await?;
+        let item = data.chart.result
             .first()
-            .map(|item| PriceResult {
-                price: item.meta.regular_market_price,
-                currency: item.meta.currency.clone(),
-            })
-            .ok_or_else(|| anyhow!("No price data found for symbol: {}", symbol))
+            .ok_or_else(|| anyhow!("No price data found for symbol: {}", symbol))?;
+
+        let current_price = item.meta.regular_market_price;
+        let currency = item.meta.currency.clone();
+
+        let mut historical = HashMap::new();
+
+        // Extract timestamps and prices if available
+        if let (Some(timestamps), Some(closes)) = (item.timestamp.as_ref(), item.indicators.quote[0].close.as_ref()) {
+            // Create vector of (timestamp, price) for non-empty prices
+            let prices: Vec<_> = timestamps.iter()
+                .zip(closes.iter())
+                .filter_map(|(ts, opt_price)| opt_price.map(|price| (*ts, price)))
+                .collect();
+
+            let now = chrono::Utc::now().timestamp() as u64;
+            let periods = [
+                (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
+                (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
+                (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
+                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365*3)),
+                (HistoricalPeriod::FiveYears, chrono::Duration::days(365*5)),
+            ];
+
+            for (period, duration) in periods {
+                let period_start = (chrono::Utc::now() - duration).timestamp() as u64;
+                // Find the first price at or after period_start
+                if let Some(price) = prices.iter()
+                    .find(|(ts, _)| *ts >= period_start)
+                    .map(|(_, price)| *price)
+                {
+                    historical.insert(period, price);
+                }
+            }
+        }
+
+        Ok(PriceResult {
+            price: current_price,
+            currency,
+            historical,
+        })
     }
 }
 
