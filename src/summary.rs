@@ -2,10 +2,13 @@ use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
 use anyhow::{Result, anyhow};
-use comfy_table::Table;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
+use comfy_table::{Attribute, Cell, Color, Table};
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -18,6 +21,18 @@ pub struct InvestmentSummary {
     pub converted_value: Option<f64>,
     pub weight_pct: Option<f64>,
     pub error: Option<String>,
+}
+
+// Helper function for consistent styling
+fn style_for_display(text: &str, style_type: &str) -> String {
+    let styled = match style_type {
+        "title" => style(text).bold().underlined(),
+        "total_label" => style(text).bold(),
+        "total_value" => style(text).green().bold(),
+        "error" => style(text).red(),
+        _ => style(text),
+    };
+    styled.to_string()
 }
 
 #[derive(Debug)]
@@ -34,56 +49,129 @@ impl PortfolioSummary {
         let target_currency = self.currency.as_deref().unwrap_or("N/A");
 
         let mut table = Table::new();
+
+        // Helper to create a styled header cell
+        let header_cell = |text: &str| {
+            Cell::new(text)
+                .fg(Color::Cyan)
+                .add_attribute(Attribute::Bold)
+        };
+        // Helper to format an optional value into a cell, or return "N/A"
+        fn format_optional<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
+            value.map_or(Cell::new("N/A").fg(Color::Red), |v| Cell::new(format_fn(v)))
+        }
+
         table
             .load_preset(UTF8_FULL)
             .apply_modifier(UTF8_ROUND_CORNERS)
             .set_header(vec![
-                "Symbol",
-                "Units",
-                "Price",
-                format!("Value ({target_currency})").as_ref(),
-                "Weight (%)",
-                "Error",
+                header_cell("Symbol"),
+                header_cell("Units"),
+                header_cell("Price"),
+                header_cell(&format!("Value ({target_currency})")),
+                header_cell("Weight (%)"),
             ]);
 
         for investment in &self.investments {
-            let units = investment
-                .units
-                .map_or("N/A".to_string(), |u| format!("{u:.2}"));
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
-            let current_price = investment
-                .current_price
-                .map_or("N/A".to_string(), |p| format!("{p:.2}{currency}"));
-            let converted_value = investment
-                .converted_value
-                .map_or("N/A".to_string(), |v| format!("{v:.2}"));
-            let weight_pct = investment
-                .weight_pct
-                .map_or("N/A".to_string(), |w| format!("{w:.2}%"));
-            let error = investment.error.as_deref().unwrap_or("").to_string();
+
+            let units = format_optional(investment.units, |u| format!("{u:.2}"));
+            let current_price =
+                format_optional(investment.current_price, |p| format!("{p:.2}{currency}"));
+            let converted_value =
+                format_optional(investment.converted_value, |v| format!("{v:.2}"));
+            let weight_pct = format_optional(investment.weight_pct, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
-                &investment.symbol,
-                &units,
-                &current_price,
-                &converted_value,
-                &weight_pct,
-                &error,
+                Cell::new(&investment.symbol),
+                units,
+                current_price,
+                converted_value,
+                weight_pct,
             ]);
         }
 
+        let total_style = if self.converted_value.is_some() {
+            "total_value"
+        } else {
+            "error"
+        };
         let total_converted_value = self
             .converted_value
             .map_or("N/A".to_string(), |v| format!("{v:.2}"));
 
-        let summary_text = format!(
-            "Portfolio: {} | Total Value ({}) : {}",
-            self.name, target_currency, total_converted_value
-        );
+        // Portfolio name at top
+        let mut output = format!("Portfolio: {}\n\n", style_for_display(&self.name, "title"));
 
-        let table_output = table.to_string();
-        format!("{table_output}\n\n{summary_text}")
+        // Table in the middle
+        output.push_str(&table.to_string());
+
+        // Total value at bottom
+        output.push_str(&format!(
+            "\n\nTotal Value ({}): {}",
+            style_for_display(target_currency, "total_label"),
+            style_for_display(&total_converted_value, total_style)
+        ));
+
+        output
     }
+}
+
+pub async fn generate_and_display_summaries(
+    portfolios: &[Portfolio],
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    target_currency: &str,
+) -> Result<()> {
+    let mut price_cache = HashMap::new();
+    let mut summaries = Vec::new();
+    let mut grand_total = 0.0;
+    let mut all_portfolios_valid = true;
+
+    for portfolio in portfolios {
+        let sum = generate_portfolio_summary(
+            portfolio,
+            symbol_provider,
+            isin_provider,
+            currency_provider,
+            &mut price_cache,
+            target_currency,
+        )
+        .await;
+
+        if let Some(value) = sum.converted_value {
+            grand_total += value;
+        } else {
+            all_portfolios_valid = false;
+        }
+        summaries.push(sum);
+    }
+
+    let num_summaries = summaries.len();
+    for (i, sum) in summaries.into_iter().enumerate() {
+        println!("{}", sum.display_as_table());
+        if i < num_summaries - 1 {
+            let term_width = console::Term::stdout()
+                .size_checked()
+                .map(|(_, w)| w as usize)
+                .unwrap_or(80);
+            println!("\n{}", "─".repeat(term_width));
+        }
+    }
+
+    if all_portfolios_valid && num_summaries > 0 {
+        let term_width = console::Term::stdout()
+            .size_checked()
+            .map(|(_, w)| w as usize)
+            .unwrap_or(80);
+        println!("\n{}", "=".repeat(term_width));
+        let total_str = format!("Grand Total ({target_currency}): {grand_total:.2}");
+        let styled_total = style(&total_str).bold().green();
+        println!("{styled_total:>term_width$}");
+    }
+
+    Ok(())
 }
 
 pub async fn generate_portfolio_summary(
@@ -94,6 +182,18 @@ pub async fn generate_portfolio_summary(
     price_cache: &mut HashMap<String, Result<PriceResult, String>>,
     portfolio_currency: &str,
 ) -> PortfolioSummary {
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.blue} {msg}")
+            .unwrap(),
+    );
+    spinner.set_message(format!(
+        "Fetching data for portfolio '{}'...",
+        portfolio.name
+    ));
+
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
         total_value: None,
@@ -249,6 +349,8 @@ pub async fn generate_portfolio_summary(
         summary.converted_value = None;
         summary.total_value = None; // Reset original total_value too if any error
     }
+
+    spinner.finish_and_clear();
 
     summary
 }
