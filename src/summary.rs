@@ -8,7 +8,6 @@ use comfy_table::{Attribute, Cell, Color, Table};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
-use std::time::Duration;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -182,17 +181,16 @@ pub async fn generate_portfolio_summary(
     price_cache: &mut HashMap<String, Result<PriceResult, String>>,
     portfolio_currency: &str,
 ) -> PortfolioSummary {
-    let spinner = ProgressBar::new_spinner();
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    spinner.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.blue} {msg}")
-            .unwrap(),
+    let pb = ProgressBar::new(portfolio.investments.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )
+            .unwrap()
+            .progress_chars("#>-"),
     );
-    spinner.set_message(format!(
-        "Fetching data for portfolio '{}'...",
-        portfolio.name
-    ));
+    pb.set_message(format!("Fetching for '{}'...", portfolio.name));
 
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
@@ -243,6 +241,7 @@ pub async fn generate_portfolio_summary(
                 }
             }
             summary.investments.push(investment_summary);
+            pb.inc(1);
             continue;
         }
 
@@ -332,6 +331,7 @@ pub async fn generate_portfolio_summary(
             }
         };
         summary.investments.push(investment_summary);
+        pb.inc(1);
     }
 
     if all_valid {
@@ -350,7 +350,7 @@ pub async fn generate_portfolio_summary(
         summary.total_value = None; // Reset original total_value too if any error
     }
 
-    spinner.finish_and_clear();
+    pb.finish_and_clear();
 
     summary
 }
