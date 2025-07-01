@@ -1,11 +1,12 @@
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
+use chrono;
 use serde::Deserialize;
+use std::collections::HashMap;
 use tracing::{debug, instrument};
 
 use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::PriceProvider;
-use crate::price_provider::PriceResult;
+use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 
 // YahooFinanceProvider implementation for PriceProvider
 pub struct YahooFinanceProvider {
@@ -31,8 +32,20 @@ struct PriceChartResult {
 }
 
 #[derive(Deserialize, Debug)]
+struct Indicators {
+    quote: Vec<Quote>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Quote {
+    close: Option<Vec<Option<f64>>>,
+}
+
+#[derive(Deserialize, Debug)]
 struct PriceChartItem {
     meta: PriceChartMeta,
+    timestamp: Option<Vec<i64>>,
+    indicators: Indicators,
 }
 
 #[derive(Deserialize, Debug)]
@@ -73,26 +86,30 @@ impl PriceProvider for YahooFinanceProvider {
         let mut historical = HashMap::new();
 
         // Extract timestamps and prices if available
-        if let (Some(timestamps), Some(closes)) = (item.timestamp.as_ref(), item.indicators.quote[0].close.as_ref()) {
+        if let (Some(timestamps), Some(closes)) = (
+            item.timestamp.as_ref(),
+            item.indicators.quote.get(0).and_then(|q| q.close.as_ref()),
+        ) {
             // Create vector of (timestamp, price) for non-empty prices
-            let prices: Vec<_> = timestamps.iter()
+            let prices: Vec<_> = timestamps
+                .iter()
                 .zip(closes.iter())
                 .filter_map(|(ts, opt_price)| opt_price.map(|price| (*ts, price)))
                 .collect();
 
-            let now = chrono::Utc::now().timestamp() as u64;
             let periods = [
                 (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
                 (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
                 (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
-                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365*3)),
-                (HistoricalPeriod::FiveYears, chrono::Duration::days(365*5)),
+                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365 * 3)),
+                (HistoricalPeriod::FiveYears, chrono::Duration::days(365 * 5)),
             ];
 
             for (period, duration) in periods {
-                let period_start = (chrono::Utc::now() - duration).timestamp() as u64;
+                let period_start = (chrono::Utc::now() - duration).timestamp();
                 // Find the first price at or after period_start
-                if let Some(price) = prices.iter()
+                if let Some(price) = prices
+                    .iter()
                     .find(|(ts, _)| *ts >= period_start)
                     .map(|(_, price)| *price)
                 {

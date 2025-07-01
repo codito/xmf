@@ -1,5 +1,5 @@
 use anyhow::Result;
-use async_trait极async_trait;
+use async_trait::async_trait;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

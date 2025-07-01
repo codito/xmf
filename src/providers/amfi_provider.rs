@@ -1,6 +1,9 @@
-use crate::price_provider::{PriceProvider, PriceResult};
+use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 use anyhow::{Context, Result, anyhow};
+use async_trait::async_trait;
+use chrono;
 use serde::Deserialize;
+use std::collections::HashMap;
 use tracing::debug;
 
 pub struct AmfiProvider {
@@ -24,7 +27,7 @@ struct AmfiResponse {
     // date: String,
 }
 
-#[async_trait::async_trait]
+#[async_trait]
 impl PriceProvider for AmfiProvider {
     async fn fetch_price(&self, identifier: &str) -> Result<PriceResult> {
         let url = format!("{}/nav/{}", self.base_url, identifier);
@@ -62,27 +65,7 @@ impl PriceProvider for AmfiProvider {
         let current_price = amfi_response.nav;
         let currency = "INR".to_string();
 
-        let mut historical = HashMap::new();
-        let now = chrono::Utc::now().naive_utc().date();
-
-        if let Some(historical_data) = &amfi_response.historical_nav {
-            let periods = [
-                (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
-                (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
-                (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
-                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365*3)),
-                (HistoricalPeriod::FiveYears, chrono::Duration::days(365*5)),
-            ];
-
-            for (period, duration) in periods {
-                let target_date = (now - duration).format("%Y-%m-%d").to_string();
-                if let Some((_, price)) = historical_data.iter()
-                    .find(|(date, _)| date == &target_date)
-                {
-                    historical.insert(period, *price);
-                }
-            }
-        }
+        let historical = HashMap::new();
 
         Ok(PriceResult {
             price: current_price,
