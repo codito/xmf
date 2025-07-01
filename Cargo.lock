@@ -2698,6 +2698,7 @@ dependencies = [
  "comfy-table",
  "console",
  "directories",
+ "futures",
  "indicatif",
  "reqwest",
  "rust_finprim",

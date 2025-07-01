@@ -169,8 +169,7 @@ mod tests {
         let price_5d = 140.0;
 
         let mock_response = format!(
-            r#"{{"nav": {}, "historical_nav": [["{}", {}], ["{}", {}], ["{}", {}], ["{}", {}]]}}"#,
-            current_price, date_5y, price_5y, date_1y, price_1y, date_1m, price_1m, date_5d, price_5d
+            r#"{{"nav": {current_price}, "historical_nav": [["{date_5y}", {price_5y}], ["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}], ["{date_5d}", {price_5d}]]}}"#,
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
@@ -182,12 +181,17 @@ mod tests {
         assert_eq!(result.historical.len(), 4);
 
         let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+                < 0.001
+        );
     }
 
     #[tokio::test]
@@ -206,8 +210,7 @@ mod tests {
         let price_1m = 130.0;
 
         let mock_response = format!(
-            r#"{{"nav": {}, "historical_nav": [["{}", {}], ["{}", {}]]}}"#,
-            current_price, date_1y, price_1y, date_1m, price_1m
+            r#"{{"nav": {current_price}, "historical_nav": [["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}]]}}"#,
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
@@ -217,20 +220,35 @@ mod tests {
         // 1D, 5D are missing as the closest data is >1 month old
         // 5Y, 3Y will resolve to the 1Y price. 1Y and 1M will resolve to their respective prices.
         assert_eq!(result.historical.len(), 4);
-        assert!(result.historical.get(&HistoricalPeriod::OneDay).is_none());
-        assert!(result.historical.get(&HistoricalPeriod::FiveDays).is_none());
+        assert!(result.historical.contains_key(&HistoricalPeriod::OneDay));
+        assert!(result.historical.contains_key(&HistoricalPeriod::FiveDays));
 
         let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y)
-            .abs() < 0.001);
-        assert!((result.historical.get(&HistoricalPeriod::ThreeYears).unwrap() - expected_change_1y)
-            .abs() < 0.001);
-        assert!((result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_1y)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+                < 0.001
+        );
+        assert!(
+            (result
+                .historical
+                .get(&HistoricalPeriod::ThreeYears)
+                .unwrap()
+                - expected_change_1y)
+                .abs()
+                < 0.001
+        );
+        assert!(
+            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_1y)
+                .abs()
+                < 0.001
+        );
     }
 
     #[tokio::test]

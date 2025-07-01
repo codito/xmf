@@ -1,6 +1,6 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashMap;
 use tracing::{debug, instrument};
@@ -8,11 +8,7 @@ use tracing::{debug, instrument};
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 
-fn find_closest_price(
-    target_ts: i64,
-    timestamps: &[i64],
-    prices: &[Option<f64>],
-) -> Option<f64> {
+fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]) -> Option<f64> {
     timestamps
         .iter()
         .position(|ts| *ts >= target_ts)
@@ -30,7 +26,7 @@ fn extract_historical_prices(
         chart_item
             .indicators
             .as_ref()
-            .and_then(|inds| inds.quote.get(0))
+            .and_then(|inds| inds.quote.first())
             .and_then(|q| q.close.as_ref()),
     ) {
         let now = Utc::now();
@@ -112,7 +108,10 @@ impl PriceProvider for YahooFinanceProvider {
         fields(symbol = %symbol)
     )]
     async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
-        let url = format!("{}/v8/finance/chart/{}?interval=1d&range=10y", self.base_url, symbol);
+        let url = format!(
+            "{}/v8/finance/chart/{}?interval=1d&range=10y",
+            self.base_url, symbol
+        );
         debug!("Requesting price data from {}", url);
 
         let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
@@ -125,7 +124,9 @@ impl PriceProvider for YahooFinanceProvider {
         debug!(response = ?response, "Received Yahoo response");
 
         let data = response.json::<YahooPriceResponse>().await?;
-        let item = data.chart.result
+        let item = data
+            .chart
+            .result
             .first()
             .ok_or_else(|| anyhow!("No price data found for symbol: {}", symbol))?;
 
@@ -223,10 +224,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     // Tests for YahooFinanceProvider (PriceProvider)
-    pub async fn create_mock_server(
-        symbol: &str,
-        mock_response: &str,
-    ) -> wiremock::MockServer {
+    pub async fn create_mock_server(symbol: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = wiremock::MockServer::start().await;
         let request_path = format!("/v8/finance/chart/{symbol}");
 
@@ -279,19 +277,18 @@ mod tests {
                 "chart": {{
                     "result": [{{
                         "meta": {{
-                            "regularMarketPrice": {},
+                            "regularMarketPrice": {current_price},
                             "currency": "USD"
                         }},
-                        "timestamp": [{}, {}, {}, {}],
+                        "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
                         "indicators": {{
                             "quote": [{{
-                                "close": [{}, {}, {}, {}]
+                                "close": [{p_5y}, {p_1y}, {p_1m}, {p_5d}]
                             }}]
                         }}
                     }}]
                 }}
             }}"#,
-            current_price, ts_5y, ts_1y, ts_1m, ts_5d, p_5y, p_1y, p_1m, p_5d
         );
 
         let mock_server = create_mock_server("AAPL", &mock_response).await;
@@ -304,20 +301,31 @@ mod tests {
         assert_eq!(result.historical.len(), 4); // 5Y, 1Y, 1M, 5D
 
         let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_1y = ((current_price - p_1y) / p_1y) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+                < 0.001
+        );
 
         let expected_change_1m = ((current_price - p_1m) / p_1m) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+                .abs()
+                < 0.001
+        );
 
         let expected_change_5d = ((current_price - p_5d) / p_5d) * 100.0;
-        assert!((result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
-            .abs() < 0.001);
+        assert!(
+            (result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
+                .abs()
+                < 0.001
+        );
     }
 
     #[tokio::test]

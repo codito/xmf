@@ -1,8 +1,8 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{anyhow, Result};
 use crate::ui;
+use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
 use std::collections::HashMap;
@@ -35,14 +35,13 @@ impl PortfolioSummary {
 
         let mut table = ui::new_styled_table();
 
-        table
-            .set_header(vec![
-                ui::header_cell("Symbol"),
-                ui::header_cell("Units"),
-                ui::header_cell("Price"),
-                ui::header_cell(&format!("Value ({target_currency})")),
-                ui::header_cell("Weight (%)"),
-            ]);
+        table.set_header(vec![
+            ui::header_cell("Symbol"),
+            ui::header_cell("Units"),
+            ui::header_cell("Price"),
+            ui::header_cell(&format!("Value ({target_currency})")),
+            ui::header_cell("Weight (%)"),
+        ]);
 
         for investment in &self.investments {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
@@ -52,7 +51,8 @@ impl PortfolioSummary {
                 ui::format_optional_cell(investment.current_price, |p| format!("{p:.2}{currency}"));
             let converted_value =
                 ui::format_optional_cell(investment.converted_value, |v| format!("{v:.2}"));
-            let weight_pct = ui::format_optional_cell(investment.weight_pct, |w| format!("{w:.2}%"));
+            let weight_pct =
+                ui::format_optional_cell(investment.weight_pct, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 Cell::new(&investment.symbol),

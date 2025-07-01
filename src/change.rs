@@ -4,8 +4,8 @@ use crate::ui;
 use anyhow::Result;
 use comfy_table::Cell;
 use futures::future::join_all;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 struct ChangeResult {
@@ -42,10 +42,12 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         for investment in &portfolio.investments {
             match investment {
                 Investment::Stock(s) => {
-                    investments_to_fetch.insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
+                    investments_to_fetch
+                        .insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
                 }
                 Investment::MutualFund(mf) => {
-                    investments_to_fetch.insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
+                    investments_to_fetch
+                        .insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
                 }
                 Investment::FixedDeposit(_) => {}
             }
@@ -59,33 +61,31 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
 
     let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
 
-    let futures = investments_to_fetch
-        .into_iter()
-        .map(|(id, provider)| {
-            let pb_clone = pb.clone();
-            async move {
-                let result = match provider.fetch_price(&id).await {
-                    Ok(price_result) => {
-                        let mut changes = BTreeMap::new();
-                        for (period, change) in price_result.historical {
-                            changes.insert(period, change);
-                        }
-                        ChangeResult {
-                            identifier: id,
-                            changes,
-                            error: None,
-                        }
+    let futures = investments_to_fetch.into_iter().map(|(id, provider)| {
+        let pb_clone = pb.clone();
+        async move {
+            let result = match provider.fetch_price(&id).await {
+                Ok(price_result) => {
+                    let mut changes = BTreeMap::new();
+                    for (period, change) in price_result.historical {
+                        changes.insert(period, change);
                     }
-                    Err(e) => ChangeResult {
+                    ChangeResult {
                         identifier: id,
-                        changes: BTreeMap::new(),
-                        error: Some(e.to_string()),
-                    },
-                };
-                pb_clone.inc(1);
-                result
-            }
-        });
+                        changes,
+                        error: None,
+                    }
+                }
+                Err(e) => ChangeResult {
+                    identifier: id,
+                    changes: BTreeMap::new(),
+                    error: Some(e.to_string()),
+                },
+            };
+            pb_clone.inc(1);
+            result
+        }
+    });
 
     let results: Vec<ChangeResult> = join_all(futures).await;
     pb.finish_and_clear();

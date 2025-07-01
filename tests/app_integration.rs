@@ -129,17 +129,16 @@ async fn test_full_app_flow_with_mock() {
                         "regularMarketPrice": 175.5,
                         "currency": "USD"
                     }},
-                    "timestamp": [{}, {}],
+                    "timestamp": [{ts_1y}, {ts_1m}],
                     "indicators": {{
                         "quote": [{{
-                            "close": [{}, {}]
+                            "close": [{price_1y}, {price_1m}]
                         }}]
                     }}
                 }}
             ]
         }}
     }}"#,
-        ts_1y, ts_1m, price_1y, price_1m
     );
 
     let mock_server = test_utils::create_mock_server("AAPL", &mock_response).await;
