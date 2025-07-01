@@ -1,12 +1,11 @@
 use crate::config::{AppConfig, Investment};
 use crate::price_provider::{HistoricalPeriod, PriceProvider};
+use crate::ui;
 use anyhow::Result;
-use comfy_table::{presets::UTF8_FULL, modifiers::UTF8_ROUND_CORNERS, Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 use futures::future::join_all;
-use std::collections::BTreeMap;
-use console::style;
-use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Clone)]
 struct ChangeResult {
@@ -58,12 +57,7 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         return Ok(());
     }
 
-    let pb = ProgressBar::new(investments_to_fetch.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")?
-            .progress_chars("#>-"),
-    );
+    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
 
     let futures = investments_to_fetch
         .into_iter()
@@ -116,16 +110,12 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         if !portfolio_results.is_empty() {
             println!(
                 "\nPortfolio: {}",
-                style_for_display(&portfolio.name, "title")
+                ui::style_text(&portfolio.name, ui::StyleType::Title)
             );
             display_results(&portfolio_results);
 
             if i < num_portfolios - 1 {
-                let term_width = console::Term::stdout()
-                    .size_checked()
-                    .map(|(_, w)| w as usize)
-                    .unwrap_or(80);
-                println!("\n{}", "─".repeat(term_width));
+                ui::print_separator();
             }
         }
     }
@@ -133,48 +123,8 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-// Helper function for consistent styling
-fn style_for_display(text: &str, style_type: &str) -> String {
-    let styled = match style_type {
-        "title" => style(text).bold().underlined(),
-        _ => style(text),
-    };
-    styled.to_string()
-}
-
-// Helper function for styling header cells
-fn style_header_cell(text: &str) -> Cell {
-    Cell::new(text)
-        .fg(Color::Cyan)
-        .add_attribute(Attribute::Bold)
-}
-
-// Helper function for styling change value cells
-fn style_change_cell(change: f64) -> Cell {
-    let text = format!("{change:.2}%");
-    if change >= 0.0 {
-        Cell::new(text).fg(Color::Green)
-    } else {
-        Cell::new(text).fg(Color::Red)
-    }
-}
-
-// Helper function for styling N/A cells
-fn style_na_cell(has_error: bool) -> Cell {
-    let color = if has_error {
-        Color::Red
-    } else {
-        Color::DarkGrey
-    };
-    Cell::new("N/A").fg(color)
-}
-
 fn display_results(results: &[ChangeResult]) {
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_FULL)
-        .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_content_arrangement(ContentArrangement::Dynamic);
+    let mut table = ui::new_styled_table();
 
     let mut periods: Vec<HistoricalPeriod> = vec![
         HistoricalPeriod::OneDay,
@@ -187,9 +137,9 @@ fn display_results(results: &[ChangeResult]) {
     ];
     periods.sort(); // Ensure consistent order
 
-    let mut header = vec![style_header_cell("Identifier")];
+    let mut header = vec![ui::header_cell("Identifier")];
     for period in &periods {
-        header.push(style_header_cell(&period.to_string()));
+        header.push(ui::header_cell(&period.to_string()));
     }
     table.set_header(header);
 
@@ -198,8 +148,8 @@ fn display_results(results: &[ChangeResult]) {
 
         for period in &periods {
             let cell = match result.changes.get(period) {
-                Some(change) => style_change_cell(*change),
-                None => style_na_cell(result.error.is_some()),
+                Some(change) => ui::change_cell(*change),
+                None => ui::na_cell(result.error.is_some()),
             };
             row_cells.push(cell);
         }

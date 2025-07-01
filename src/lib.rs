@@ -4,7 +4,8 @@ pub mod currency_provider;
 pub mod log;
 pub mod price_provider;
 pub mod providers;
-pub mod summary; // New module declaration
+pub mod summary;
+pub mod ui;
 
 use anyhow::Result;
 use tracing::{debug, info};

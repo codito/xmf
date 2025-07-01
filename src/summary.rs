@@ -2,8 +2,11 @@ use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
 use anyhow::{Result, anyhow};
-use comfy_table::modifiers::UTF8_ROUND_CORNERS;
-use comfy_table::presets::UTF8_FULL;
+use crate::config::Portfolio;
+use crate::currency_provider::CurrencyRateProvider;
+use crate::price_provider::{PriceProvider, PriceResult};
+use crate::ui;
+use anyhow::{Result, anyhow};
 use comfy_table::{Attribute, Cell, Color, Table};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -22,18 +25,6 @@ pub struct InvestmentSummary {
     pub error: Option<String>,
 }
 
-// Helper function for consistent styling
-fn style_for_display(text: &str, style_type: &str) -> String {
-    let styled = match style_type {
-        "title" => style(text).bold().underlined(),
-        "total_label" => style(text).bold(),
-        "total_value" => style(text).green().bold(),
-        "error" => style(text).red(),
-        _ => style(text),
-    };
-    styled.to_string()
-}
-
 #[derive(Debug)]
 pub struct PortfolioSummary {
     pub name: String,
@@ -47,39 +38,26 @@ impl PortfolioSummary {
     pub fn display_as_table(&self) -> String {
         let target_currency = self.currency.as_deref().unwrap_or("N/A");
 
-        let mut table = Table::new();
-
-        // Helper to create a styled header cell
-        let header_cell = |text: &str| {
-            Cell::new(text)
-                .fg(Color::Cyan)
-                .add_attribute(Attribute::Bold)
-        };
-        // Helper to format an optional value into a cell, or return "N/A"
-        fn format_optional<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
-            value.map_or(Cell::new("N/A").fg(Color::Red), |v| Cell::new(format_fn(v)))
-        }
+        let mut table = ui::new_styled_table();
 
         table
-            .load_preset(UTF8_FULL)
-            .apply_modifier(UTF8_ROUND_CORNERS)
             .set_header(vec![
-                header_cell("Symbol"),
-                header_cell("Units"),
-                header_cell("Price"),
-                header_cell(&format!("Value ({target_currency})")),
-                header_cell("Weight (%)"),
+                ui::header_cell("Symbol"),
+                ui::header_cell("Units"),
+                ui::header_cell("Price"),
+                ui::header_cell(&format!("Value ({target_currency})")),
+                ui::header_cell("Weight (%)"),
             ]);
 
         for investment in &self.investments {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
 
-            let units = format_optional(investment.units, |u| format!("{u:.2}"));
+            let units = ui::format_optional_cell(investment.units, |u| format!("{u:.2}"));
             let current_price =
-                format_optional(investment.current_price, |p| format!("{p:.2}{currency}"));
+                ui::format_optional_cell(investment.current_price, |p| format!("{p:.2}{currency}"));
             let converted_value =
-                format_optional(investment.converted_value, |v| format!("{v:.2}"));
-            let weight_pct = format_optional(investment.weight_pct, |w| format!("{w:.2}%"));
+                ui::format_optional_cell(investment.converted_value, |v| format!("{v:.2}"));
+            let weight_pct = ui::format_optional_cell(investment.weight_pct, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 Cell::new(&investment.symbol),
@@ -90,17 +68,20 @@ impl PortfolioSummary {
             ]);
         }
 
-        let total_style = if self.converted_value.is_some() {
-            "total_value"
+        let total_style_type = if self.converted_value.is_some() {
+            ui::StyleType::TotalValue
         } else {
-            "error"
+            ui::StyleType::Error
         };
         let total_converted_value = self
             .converted_value
             .map_or("N/A".to_string(), |v| format!("{v:.2}"));
 
         // Portfolio name at top
-        let mut output = format!("Portfolio: {}\n\n", style_for_display(&self.name, "title"));
+        let mut output = format!(
+            "Portfolio: {}\n\n",
+            ui::style_text(&self.name, ui::StyleType::Title)
+        );
 
         // Table in the middle
         output.push_str(&table.to_string());
@@ -108,8 +89,8 @@ impl PortfolioSummary {
         // Total value at bottom
         output.push_str(&format!(
             "\n\nTotal Value ({}): {}",
-            style_for_display(target_currency, "total_label"),
-            style_for_display(&total_converted_value, total_style)
+            ui::style_text(target_currency, ui::StyleType::TotalLabel),
+            ui::style_text(&total_converted_value, total_style_type)
         ));
 
         output
@@ -151,11 +132,7 @@ pub async fn generate_and_display_summaries(
     for (i, sum) in summaries.into_iter().enumerate() {
         println!("{}", sum.display_as_table());
         if i < num_summaries - 1 {
-            let term_width = console::Term::stdout()
-                .size_checked()
-                .map(|(_, w)| w as usize)
-                .unwrap_or(80);
-            println!("\n{}", "─".repeat(term_width));
+            ui::print_separator();
         }
     }
 
@@ -181,15 +158,7 @@ pub async fn generate_portfolio_summary(
     price_cache: &mut HashMap<String, Result<PriceResult, String>>,
     portfolio_currency: &str,
 ) -> PortfolioSummary {
-    let pb = ProgressBar::new(portfolio.investments.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} {msg} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let pb = ui::new_progress_bar(portfolio.investments.len() as u64, true);
     pb.set_message(format!("Fetching for '{}'...", portfolio.name));
 
     let mut summary = PortfolioSummary {
