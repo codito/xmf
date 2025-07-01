@@ -2,7 +2,7 @@ use crate::config::{AppConfig, Investment};
 use crate::price_provider::{HistoricalPeriod, PriceProvider};
 use crate::ui;
 use anyhow::Result;
-use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::HashMap;
 use std::collections::BTreeMap;

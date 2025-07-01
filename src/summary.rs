@@ -1,15 +1,10 @@
 use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
-use anyhow::{Result, anyhow};
-use crate::config::Portfolio;
-use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::{PriceProvider, PriceResult};
+use anyhow::{anyhow, Result};
 use crate::ui;
-use anyhow::{Result, anyhow};
-use comfy_table::{Attribute, Cell, Color, Table};
+use comfy_table::Cell;
 use console::style;
-use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
 use tracing::debug;
 
