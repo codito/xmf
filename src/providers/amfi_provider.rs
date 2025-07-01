@@ -116,7 +116,7 @@ mod tests {
     // Helper function to create a mock server for AMFI provider
     async fn create_amfi_mock_server(
         isin: &str,
-        mock_response: &'static str,
+        mock_response: &str,
         status_code: u16,
     ) -> MockServer {
         let mock_server = MockServer::start().await;
@@ -141,6 +141,155 @@ mod tests {
 
         assert_eq!(result.price, 123.45);
         assert_eq!(result.currency, "INR");
+    }
+
+    #[tokio::test]
+    async fn test_successful_amfi_price_fetch_with_full_historical_data() {
+        let isin = "INF789F01XA0";
+        let now = chrono::Utc::now().date_naive();
+
+        let date_5y = (now - chrono::Duration::days(365 * 5 - 10))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_5y = 100.0;
+        let date_3y = (now - chrono::Duration::days(365 * 3 - 10))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_3y = 110.0;
+        let date_1y = (now - chrono::Duration::days(365 - 10))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1y = 120.0;
+        let date_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1m = 130.0;
+        let date_1w = (now - chrono::Duration::weeks(1) + chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1w = 140.0;
+
+        let mock_response = format!(
+            r#"{{"nav": 150.0, "historical_nav": [["{}", {}], ["{}", {}], ["{}", {}], ["{}", {}], ["{}", {}]]}}"#,
+            date_5y, price_5y, date_3y, price_3y, date_1y, price_1y, date_1m, price_1m, date_1w, price_1w
+        );
+
+        let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
+        let provider = AmfiProvider::new(&mock_server.uri());
+        let result = provider.fetch_price(isin).await.unwrap();
+
+        assert_eq!(result.price, 150.0);
+        assert_eq!(result.currency, "INR");
+        assert_eq!(result.historical.len(), 5);
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::FiveYears).unwrap(),
+            price_5y
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::ThreeYears).unwrap(),
+            price_3y
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneYear).unwrap(),
+            price_1y
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneMonth).unwrap(),
+            price_1m
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneWeek).unwrap(),
+            price_1w
+        );
+    }
+
+    #[tokio::test]
+    async fn test_successful_amfi_price_fetch_with_partial_historical_data() {
+        let isin = "INF789F01XA0";
+        let now = chrono::Utc::now().date_naive();
+        let date_1y = (now - chrono::Duration::days(365 - 10))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1y = 120.0;
+        let date_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1m = 130.0;
+
+        let mock_response = format!(
+            r#"{{"nav": 150.0, "historical_nav": [["{}", {}], ["{}", {}]]}}"#,
+            date_1y, price_1y, date_1m, price_1m
+        );
+
+        let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
+        let provider = AmfiProvider::new(&mock_server.uri());
+        let result = provider.fetch_price(isin).await.unwrap();
+
+        // OneWeek is missing as the closest data is >1 month old
+        // 5Y, 3Y, 1Y will all resolve to the 1Y price
+        assert_eq!(result.historical.len(), 4);
+        assert!(result.historical.get(&HistoricalPeriod::OneWeek).is_none());
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneMonth).unwrap(),
+            price_1m
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneYear).unwrap(),
+            price_1y
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::ThreeYears).unwrap(),
+            price_1y
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::FiveYears).unwrap(),
+            price_1y
+        );
+    }
+
+    #[tokio::test]
+    async fn test_successful_amfi_price_fetch_with_empty_historical_data() {
+        let isin = "INF789F01XA0";
+        let mock_response = r#"{"nav": 123.45, "historical_nav": []}"#;
+        let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
+
+        let provider = AmfiProvider::new(&mock_server.uri());
+        let result = provider.fetch_price(isin).await.unwrap();
+
+        assert!(result.historical.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_successful_amfi_price_fetch_with_malformed_historical_data() {
+        let isin = "INF789F01XA0";
+        let now = chrono::Utc::now().date_naive();
+        let date_1w = (now - chrono::Duration::weeks(1) + chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
+        let price_1w = 140.0;
+        let mock_response = format!(
+            r#"{{"nav": 150.0, "historical_nav": [["bad-date", 100.0], ["{}", {}]]}}"#,
+            date_1w, price_1w
+        );
+
+        let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
+        let provider = AmfiProvider::new(&mock_server.uri());
+        let result = provider.fetch_price(isin).await.unwrap();
+
+        // The malformed date is ignored, and the valid 1-week data is used for all periods.
+        assert_eq!(result.historical.len(), 5);
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneWeek).unwrap(),
+            price_1w
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneMonth).unwrap(),
+            price_1w
+        );
+        assert_eq!(
+            *result.historical.get(&HistoricalPeriod::OneYear).unwrap(),
+            price_1w
+        );
     }
 
     #[tokio::test]
