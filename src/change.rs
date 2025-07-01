@@ -7,7 +7,6 @@ use std::collections::BTreeMap;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::collections::HashMap;
-use std::time::Duration;
 
 #[derive(Clone)]
 struct ChangeResult {
@@ -138,7 +137,7 @@ fn display_results(results: &[ChangeResult]) {
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
-        .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+        .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic);
 
     let mut periods: Vec<HistoricalPeriod> = vec![
@@ -166,30 +165,28 @@ fn display_results(results: &[ChangeResult]) {
 
     for result in results {
         let mut row_cells = vec![Cell::new(&result.identifier)];
-        let mut span: Option<(usize, usize)> = None;
 
-        if let Some(e) = &result.error {
-            row_cells.push(Cell::new(format!("Error: {e}")).fg(Color::Red));
-            span = Some((1, periods.len()));
-        } else {
-            for period in &periods {
-                match result.changes.get(period) {
-                    Some(change) => {
-                        let cell = if *change >= 0.0 {
-                            Cell::new(format!("{change:.2}%")).fg(Color::Green)
-                        } else {
-                            Cell::new(format!("{change:.2}%")).fg(Color::Red)
-                        };
-                        row_cells.push(cell);
-                    }
-                    None => row_cells.push(Cell::new("N/A").fg(Color::DarkGrey)),
+        for period in &periods {
+            match result.changes.get(period) {
+                Some(change) => {
+                    let cell = if *change >= 0.0 {
+                        Cell::new(format!("{change:.2}%")).fg(Color::Green)
+                    } else {
+                        Cell::new(format!("{change:.2}%")).fg(Color::Red)
+                    };
+                    row_cells.push(cell);
+                }
+                None => {
+                    let color = if result.error.is_some() {
+                        Color::Red
+                    } else {
+                        Color::DarkGrey
+                    };
+                    row_cells.push(Cell::new("N/A").fg(color));
                 }
             }
         }
-        let mut row = table.add_row(row_cells);
-        if let Some((index, span_width)) = span {
-            row.set_cell_span(index, span_width);
-        }
+        table.add_row(row_cells);
     }
 
     println!("{table}");
