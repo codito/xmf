@@ -116,7 +116,7 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         if !portfolio_results.is_empty() {
             println!(
                 "\nPortfolio: {}",
-                style(&portfolio.name).bold().underlined()
+                style_for_display(&portfolio.name, "title")
             );
             display_results(&portfolio_results);
 
@@ -131,6 +131,42 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
     }
 
     Ok(())
+}
+
+// Helper function for consistent styling
+fn style_for_display(text: &str, style_type: &str) -> String {
+    let styled = match style_type {
+        "title" => style(text).bold().underlined(),
+        _ => style(text),
+    };
+    styled.to_string()
+}
+
+// Helper function for styling header cells
+fn style_header_cell(text: &str) -> Cell {
+    Cell::new(text)
+        .fg(Color::Cyan)
+        .add_attribute(Attribute::Bold)
+}
+
+// Helper function for styling change value cells
+fn style_change_cell(change: f64) -> Cell {
+    let text = format!("{change:.2}%");
+    if change >= 0.0 {
+        Cell::new(text).fg(Color::Green)
+    } else {
+        Cell::new(text).fg(Color::Red)
+    }
+}
+
+// Helper function for styling N/A cells
+fn style_na_cell(has_error: bool) -> Cell {
+    let color = if has_error {
+        Color::Red
+    } else {
+        Color::DarkGrey
+    };
+    Cell::new("N/A").fg(color)
 }
 
 fn display_results(results: &[ChangeResult]) {
@@ -151,15 +187,9 @@ fn display_results(results: &[ChangeResult]) {
     ];
     periods.sort(); // Ensure consistent order
 
-    let mut header = vec![Cell::new("Identifier")
-        .fg(Color::Cyan)
-        .add_attribute(Attribute::Bold)];
+    let mut header = vec![style_header_cell("Identifier")];
     for period in &periods {
-        header.push(
-            Cell::new(period.to_string())
-                .fg(Color::Cyan)
-                .add_attribute(Attribute::Bold),
-        );
+        header.push(style_header_cell(&period.to_string()));
     }
     table.set_header(header);
 
@@ -167,24 +197,11 @@ fn display_results(results: &[ChangeResult]) {
         let mut row_cells = vec![Cell::new(&result.identifier)];
 
         for period in &periods {
-            match result.changes.get(period) {
-                Some(change) => {
-                    let cell = if *change >= 0.0 {
-                        Cell::new(format!("{change:.2}%")).fg(Color::Green)
-                    } else {
-                        Cell::new(format!("{change:.2}%")).fg(Color::Red)
-                    };
-                    row_cells.push(cell);
-                }
-                None => {
-                    let color = if result.error.is_some() {
-                        Color::Red
-                    } else {
-                        Color::DarkGrey
-                    };
-                    row_cells.push(Cell::new("N/A").fg(color));
-                }
-            }
+            let cell = match result.changes.get(period) {
+                Some(change) => style_change_cell(*change),
+                None => style_na_cell(result.error.is_some()),
+            };
+            row_cells.push(cell);
         }
         table.add_row(row_cells);
     }
