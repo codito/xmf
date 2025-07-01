@@ -383,6 +383,7 @@ mod tests {
                 Ok(PriceResult {
                     price,
                     currency: currency.to_string(),
+                    historical: HashMap::new(),
                 }),
             );
         }

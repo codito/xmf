@@ -20,10 +20,7 @@ mod test_utils {
     }
 
     // New helper for AMFI mock server in integration tests
-    pub async fn create_amfi_mock_server(
-        isin: &str,
-        mock_response: &str,
-    ) -> wiremock::MockServer {
+    pub async fn create_amfi_mock_server(isin: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = MockServer::start().await;
         let url_path = format!("/{isin}"); // AMFI provider uses format!("{}/{}", self.base_url, identifier);
 
@@ -236,6 +233,10 @@ async fn test_real_amfi_api() {
             assert_eq!(
                 price_result.currency, "INR",
                 "Currency should be Indian Rupee"
+            );
+            assert!(
+                !price_result.historical.is_empty(),
+                "Price history should be non-empty"
             );
 
             info!(
