@@ -59,9 +59,35 @@ impl PriceProvider for AmfiProvider {
             identifier, amfi_response.nav
         );
 
+        let current_price = amfi_response.nav;
+        let currency = "INR".to_string();
+
+        let mut historical = HashMap::new();
+        let now = chrono::Utc::now().naive_utc().date();
+
+        if let Some(historical_data) = &amfi_response.historical_nav {
+            let periods = [
+                (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
+                (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
+                (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
+                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365*3)),
+                (HistoricalPeriod::FiveYears, chrono::Duration::days(365*5)),
+            ];
+
+            for (period, duration) in periods {
+                let target_date = (now - duration).format("%Y-%m-%d").to_string();
+                if let Some((_, price)) = historical_data.iter()
+                    .find(|(date, _)| date == &target_date)
+                {
+                    historical.insert(period, *price);
+                }
+            }
+        }
+
         Ok(PriceResult {
-            price: amfi_response.nav,
-            currency: "INR".to_string(), // AMFI prices are typically in Indian Rupee
+            price: current_price,
+            currency,
+            historical,
         })
     }
 }
