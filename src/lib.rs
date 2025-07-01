@@ -1,3 +1,4 @@
+pub mod change;
 pub mod config;
 pub mod currency_provider;
 pub mod log;

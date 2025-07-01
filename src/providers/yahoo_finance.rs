@@ -1,12 +1,61 @@
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono;
+use chrono::{self, Duration, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use tracing::{debug, instrument};
 
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
+
+fn find_closest_price(
+    target_ts: i64,
+    timestamps: &[i64],
+    prices: &[Option<f64>],
+) -> Option<f64> {
+    timestamps
+        .iter()
+        .position(|&ts| *ts >= target_ts)
+        .and_then(|index| prices.get(index).and_then(|p| *p))
+}
+
+fn extract_historical_prices(
+    chart_item: &PriceChartItem,
+    current_price: f64,
+) -> HashMap<HistoricalPeriod, f64> {
+    let mut historical_changes = HashMap::new();
+
+    if let (Some(timestamps), Some(closes)) = (
+        chart_item.timestamp.as_ref(),
+        chart_item
+            .indicators
+            .as_ref()
+            .and_then(|inds| inds.quote.get(0))
+            .and_then(|q| q.close.as_ref()),
+    ) {
+        let now = Utc::now();
+
+        for period in [
+            HistoricalPeriod::OneDay,
+            HistoricalPeriod::FiveDays,
+            HistoricalPeriod::OneMonth,
+            HistoricalPeriod::OneYear,
+            HistoricalPeriod::ThreeYears,
+            HistoricalPeriod::FiveYears,
+            HistoricalPeriod::TenYears,
+        ] {
+            let target_date = now - period.to_duration();
+            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
+                if price > 0.0 {
+                    let change = ((current_price - price) / price) * 100.0;
+                    historical_changes.insert(period, change);
+                }
+            }
+        }
+    }
+
+    historical_changes
+}
 
 // YahooFinanceProvider implementation for PriceProvider
 pub struct YahooFinanceProvider {
@@ -83,43 +132,7 @@ impl PriceProvider for YahooFinanceProvider {
         let current_price = item.meta.regular_market_price;
         let currency = item.meta.currency.clone();
 
-        let mut historical = HashMap::new();
-
-        // Extract timestamps and prices if available
-        if let (Some(timestamps), Some(closes)) = (
-            item.timestamp.as_ref(),
-            item.indicators
-                .as_ref()
-                .and_then(|inds| inds.quote.get(0))
-                .and_then(|q| q.close.as_ref()),
-        ) {
-            // Create vector of (timestamp, price) for non-empty prices
-            let prices: Vec<_> = timestamps
-                .iter()
-                .zip(closes.iter())
-                .filter_map(|(ts, opt_price)| opt_price.map(|price| (*ts, price)))
-                .collect();
-
-            let periods = [
-                (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
-                (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
-                (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
-                (HistoricalPeriod::ThreeYears, chrono::Duration::days(365 * 3)),
-                (HistoricalPeriod::FiveYears, chrono::Duration::days(365 * 5)),
-            ];
-
-            for (period, duration) in periods {
-                let period_start = (chrono::Utc::now() - duration).timestamp();
-                // Find the first price at or after period_start
-                if let Some(price) = prices
-                    .iter()
-                    .find(|(ts, _)| *ts >= period_start)
-                    .map(|(_, price)| *price)
-                {
-                    historical.insert(period, price);
-                }
-            }
-        }
+        let historical = extract_historical_prices(item, current_price);
 
         Ok(PriceResult {
             price: current_price,
@@ -251,35 +264,34 @@ mod tests {
     #[tokio::test]
     async fn test_successful_price_fetch_with_historical_data() {
         let now = chrono::Utc::now();
+        let current_price = 150.65;
         let ts_5y = (now - chrono::Duration::days(365 * 5 - 10)).timestamp();
         let p_5y = 100.0;
-        let ts_3y = (now - chrono::Duration::days(365 * 3 - 10)).timestamp();
-        let p_3y = 110.0;
         let ts_1y = (now - chrono::Duration::days(365 - 10)).timestamp();
         let p_1y = 120.0;
         let ts_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2)).timestamp();
         let p_1m = 130.0;
-        let ts_1w = (now - chrono::Duration::weeks(1) + chrono::Duration::days(2)).timestamp();
-        let p_1w = 140.0;
+        let ts_5d = (now - chrono::Duration::days(5) + chrono::Duration::days(1)).timestamp();
+        let p_5d = 145.0;
 
         let mock_response = format!(
             r#"{{
                 "chart": {{
                     "result": [{{
                         "meta": {{
-                            "regularMarketPrice": 150.65,
+                            "regularMarketPrice": {},
                             "currency": "USD"
                         }},
-                        "timestamp": [{}, {}, {}, {}, {}],
+                        "timestamp": [{}, {}, {}, {}],
                         "indicators": {{
                             "quote": [{{
-                                "close": [{}, {}, {}, {}, {}]
+                                "close": [{}, {}, {}, {}]
                             }}]
                         }}
                     }}]
                 }}
             }}"#,
-            ts_5y, ts_3y, ts_1y, ts_1m, ts_1w, p_5y, p_3y, p_1y, p_1m, p_1w
+            current_price, ts_5y, ts_1y, ts_1m, ts_5d, p_5y, p_1y, p_1m, p_5d
         );
 
         let mock_server = create_mock_server("AAPL", &mock_response).await;
@@ -287,20 +299,25 @@ mod tests {
         let provider = YahooFinanceProvider::new(&mock_server.uri());
         let result = provider.fetch_price("AAPL").await.unwrap();
 
-        assert_eq!(result.price, 150.65);
+        assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "USD");
-        assert_eq!(result.historical.len(), 5);
-        assert_eq!(
-            result.historical.get(&HistoricalPeriod::FiveYears),
-            Some(&p_5y)
-        );
-        assert_eq!(
-            result.historical.get(&HistoricalPeriod::ThreeYears),
-            Some(&p_3y)
-        );
-        assert_eq!(result.historical.get(&HistoricalPeriod::OneYear), Some(&p_1y));
-        assert_eq!(result.historical.get(&HistoricalPeriod::OneMonth), Some(&p_1m));
-        assert_eq!(result.historical.get(&HistoricalPeriod::OneWeek), Some(&p_1w));
+        assert_eq!(result.historical.len(), 4); // 5Y, 1Y, 1M, 5D
+
+        let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
+        assert!((result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
+            .abs() < 0.001);
+
+        let expected_change_1y = ((current_price - p_1y) / p_1y) * 100.0;
+        assert!((result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y)
+            .abs() < 0.001);
+
+        let expected_change_1m = ((current_price - p_1m) / p_1m) * 100.0;
+        assert!((result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+            .abs() < 0.001);
+
+        let expected_change_5d = ((current_price - p_5d) / p_5d) * 100.0;
+        assert!((result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
+            .abs() < 0.001);
     }
 
     #[tokio::test]

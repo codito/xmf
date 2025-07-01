@@ -23,6 +23,12 @@ enum Commands {
         #[arg(short, long)]
         config_path: Option<String>,
     },
+    /// Display price change summary
+    Change {
+        /// Path to optional configuration file
+        #[arg(short, long)]
+        config_path: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -34,6 +40,7 @@ async fn main() -> Result<()> {
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
         Some(Commands::Summary { config_path }) => xmf::run(config_path.as_deref()).await,
+        Some(Commands::Change { config_path }) => xmf::change::run(config_path.as_deref()).await,
         None => {
             Cli::command().print_help()?;
             Ok(())
