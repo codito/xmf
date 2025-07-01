@@ -3,8 +3,10 @@ use async_trait::async_trait;
 use chrono::Utc;
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tracing::{debug, instrument};
 
+use crate::cache::Cache;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 
@@ -56,12 +58,14 @@ fn extract_historical_prices(
 // YahooFinanceProvider implementation for PriceProvider
 pub struct YahooFinanceProvider {
     base_url: String,
+    cache: Arc<Cache<String, PriceResult>>,
 }
 
 impl YahooFinanceProvider {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(base_url: &str, cache: Arc<Cache<String, PriceResult>>) -> Self {
         YahooFinanceProvider {
             base_url: base_url.to_string(),
+            cache,
         }
     }
 }
@@ -108,6 +112,10 @@ impl PriceProvider for YahooFinanceProvider {
         fields(symbol = %symbol)
     )]
     async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
+        if let Some(cached) = self.cache.get(&symbol.to_string()).await {
+            return Ok(cached);
+        }
+
         let url = format!(
             "{}/v8/finance/chart/{}?interval=1d&range=10y",
             self.base_url, symbol
@@ -135,23 +143,29 @@ impl PriceProvider for YahooFinanceProvider {
 
         let historical = extract_historical_prices(item, current_price);
 
-        Ok(PriceResult {
+        let result = PriceResult {
             price: current_price,
             currency,
             historical,
-        })
+        };
+
+        self.cache.put(symbol.to_string(), result.clone()).await;
+
+        Ok(result)
     }
 }
 
 // YahooCurrencyProvider implementation for CurrencyRateProvider
 pub struct YahooCurrencyProvider {
     base_url: String,
+    cache: Arc<Cache<String, f64>>,
 }
 
 impl YahooCurrencyProvider {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(base_url: &str, cache: Arc<Cache<String, f64>>) -> Self {
         YahooCurrencyProvider {
             base_url: base_url.to_string(),
+            cache,
         }
     }
 }
@@ -181,6 +195,10 @@ struct CurrencyChartMeta {
 impl CurrencyRateProvider for YahooCurrencyProvider {
     async fn get_rate(&self, from: &str, to: &str) -> Result<f64> {
         let symbol = format!("{from}{to}=X");
+        if let Some(cached) = self.cache.get(&symbol).await {
+            return Ok(cached);
+        }
+
         let endpoint = format!("/v8/finance/chart/{symbol}");
         let url = format!("{}{}", self.base_url, endpoint);
         debug!("Requesting currency rate from {}", url);
@@ -213,7 +231,9 @@ impl CurrencyRateProvider for YahooCurrencyProvider {
             .next()
             .ok_or_else(|| anyhow!("No rate data found for currency pair: {}", symbol))?;
 
-        Ok(item.meta.regular_market_price)
+        let rate = item.meta.regular_market_price;
+        self.cache.put(symbol, rate).await;
+        Ok(rate)
     }
 }
 
@@ -251,8 +271,9 @@ mod tests {
         }"#;
 
         let mock_server = create_mock_server("AAPL", mock_response).await;
+        let cache = Arc::new(Cache::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri());
+        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price("AAPL").await.unwrap();
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
@@ -292,8 +313,9 @@ mod tests {
         );
 
         let mock_server = create_mock_server("AAPL", &mock_response).await;
+        let cache = Arc::new(Cache::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri());
+        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price("AAPL").await.unwrap();
 
         assert_eq!(result.price, current_price);
@@ -346,8 +368,9 @@ mod tests {
     async fn test_no_price_result_data() {
         let mock_response = r#"{"chart": {"result": []}}"#;
         let mock_server = create_mock_server("INVALID", mock_response).await;
+        let cache = Arc::new(Cache::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri());
+        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price("INVALID").await;
         assert!(result.is_err());
         assert_eq!(
@@ -360,7 +383,8 @@ mod tests {
     #[tokio::test]
     async fn test_successful_rate_fetch() {
         let mock_server = MockServer::start().await;
-        let provider = YahooCurrencyProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::new());
+        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {
@@ -391,7 +415,8 @@ mod tests {
     #[tokio::test]
     async fn test_no_currency_rate_found() {
         let mock_server = MockServer::start().await;
-        let provider = YahooCurrencyProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::new());
+        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {
@@ -417,7 +442,8 @@ mod tests {
     #[tokio::test]
     async fn test_yahoo_currency_api_error_response() {
         let mock_server = MockServer::start().await;
-        let provider = YahooCurrencyProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::new());
+        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
 
         let expected_endpoint = "/v8/finance/chart/USDEUR=X";
         Mock::given(method("GET"))
@@ -437,7 +463,8 @@ mod tests {
     #[tokio::test]
     async fn test_yahoo_currency_api_malformed_response() {
         let mock_server = MockServer::start().await;
-        let provider = YahooCurrencyProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::new());
+        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {
