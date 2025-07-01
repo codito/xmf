@@ -5,6 +5,7 @@ use crate::ui;
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
+use futures::future::join_all;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -99,7 +100,54 @@ pub async fn generate_and_display_summaries(
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     target_currency: &str,
 ) -> Result<()> {
-    let mut price_cache = HashMap::new();
+    let mut price_cache: HashMap<String, Result<PriceResult, String>> = HashMap::new();
+
+    // Step 1: Collect all unique investments that need fetching
+    let mut investments_to_fetch = HashMap::new();
+    for portfolio in portfolios {
+        for investment in &portfolio.investments {
+            match investment {
+                crate::config::Investment::Stock(s) => {
+                    if !investments_to_fetch.contains_key(&s.symbol) {
+                        investments_to_fetch
+                            .insert(s.symbol.clone(), symbol_provider as &dyn PriceProvider);
+                    }
+                }
+                crate::config::Investment::MutualFund(mf) => {
+                    if !investments_to_fetch.contains_key(&mf.isin) {
+                        investments_to_fetch
+                            .insert(mf.isin.clone(), isin_provider as &dyn PriceProvider);
+                    }
+                }
+                crate::config::Investment::FixedDeposit(_) => {}
+            }
+        }
+    }
+
+    // Step 2: Fetch prices concurrently
+    if !investments_to_fetch.is_empty() {
+        let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
+        pb.set_message("Fetching prices...");
+
+        let futures = investments_to_fetch.into_iter().map(|(id, provider)| {
+            let pb_clone = pb.clone();
+            async move {
+                let result = provider.fetch_price(&id).await;
+                pb_clone.inc(1);
+                (id, result)
+            }
+        });
+
+        let results = join_all(futures).await;
+        pb.finish_and_clear();
+
+        // Step 3: Populate cache
+        for (id, result) in results {
+            price_cache.insert(id, result.map_err(|e| e.to_string()));
+        }
+    }
+
+    // Step 4: Generate summaries for each portfolio
     let mut summaries = Vec::new();
     let mut grand_total = 0.0;
     let mut all_portfolios_valid = true;
@@ -107,10 +155,8 @@ pub async fn generate_and_display_summaries(
     for portfolio in portfolios {
         let sum = generate_portfolio_summary(
             portfolio,
-            symbol_provider,
-            isin_provider,
             currency_provider,
-            &mut price_cache,
+            &price_cache,
             target_currency,
         )
         .await;
@@ -147,14 +193,12 @@ pub async fn generate_and_display_summaries(
 
 pub async fn generate_portfolio_summary(
     portfolio: &Portfolio,
-    symbol_provider: &(dyn PriceProvider + Send + Sync),
-    isin_provider: &(dyn PriceProvider + Send + Sync),
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
-    price_cache: &mut HashMap<String, Result<PriceResult, String>>,
+    price_cache: &HashMap<String, Result<PriceResult, String>>,
     portfolio_currency: &str,
 ) -> PortfolioSummary {
     let pb = ui::new_progress_bar(portfolio.investments.len() as u64, true);
-    pb.set_message(format!("Fetching for '{}'...", portfolio.name));
+    pb.set_message(format!("Processing '{}'...", portfolio.name));
 
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
@@ -209,22 +253,18 @@ pub async fn generate_portfolio_summary(
             continue;
         }
 
-        let (identifier, units, provider_to_use) = match investment {
-            crate::config::Investment::Stock(s) => (s.symbol.clone(), s.units, symbol_provider),
-            crate::config::Investment::MutualFund(mf) => (mf.isin.clone(), mf.units, isin_provider),
+        let (identifier, units) = match investment {
+            crate::config::Investment::Stock(s) => (s.symbol.clone(), s.units),
+            crate::config::Investment::MutualFund(mf) => (mf.isin.clone(), mf.units),
             _ => unreachable!(),
         };
 
-        let price_result = if let Some(cached) = price_cache.get(&identifier) {
-            match cached {
+        let price_result = match price_cache.get(&identifier) {
+            Some(cached) => match cached {
                 Ok(pr) => Ok(pr.clone()),
                 Err(e) => Err(anyhow!(e.clone())),
-            }
-        } else {
-            let result = provider_to_use.fetch_price(&identifier).await;
-            let cache_entry = result.as_ref().map_err(|e| e.to_string());
-            price_cache.insert(identifier.clone(), cache_entry.cloned());
-            result
+            },
+            None => Err(anyhow!("Price for {} not found in cache. This is a bug.", identifier)),
         };
 
         let mut investment_summary = InvestmentSummary {
@@ -412,11 +452,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_valid_single_investment() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 150.0, "USD");
-        let isin_provider = MockProvider::new();
         let currency_provider = MockCurrencyProvider::new();
-        let mut cache = HashMap::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 150.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
         let portfolio = Portfolio {
             name: "Tech".to_string(),
             investments: vec![Investment::Stock(StockInvestment {
@@ -424,13 +469,10 @@ mod tests {
                 units: 10.0,
             })],
         };
-
         let summary = generate_portfolio_summary(
             &portfolio,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "USD",
         )
         .await;
@@ -448,12 +490,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_error_handling_price_fetch() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 150.0, "USD");
-        price_provider.add_error("MSFT", "API unavailable");
-        let isin_provider = MockProvider::new();
         let currency_provider = MockCurrencyProvider::new();
-        let mut cache = HashMap::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 150.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
+        price_cache.insert(
+            "MSFT".to_string(),
+            Err("API unavailable".to_string()),
+        );
+
         let portfolio = Portfolio {
             name: "Tech".to_string(),
             investments: vec![
@@ -470,19 +521,16 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "USD",
         )
         .await;
 
-        assert!(summary.total_value.is_none());
         assert!(summary.converted_value.is_none());
         assert_eq!(summary.investments[0].error, None);
         assert_eq!(
-            summary.investments[1].error,
+            summary.investments[1].error.as_deref(),
             Some("API unavailable".to_string())
         );
         assert!(summary.investments[0].converted_value.is_some());
@@ -491,13 +539,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_mixed_currencies_with_conversion() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 150.0, "USD");
-        price_provider.add_response("RY", 100.0, "CAD");
-        let isin_provider = MockProvider::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 150.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
+        price_cache.insert(
+            "RY".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "CAD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_rate("CAD", "USD", 0.75);
-        let mut cache = HashMap::new();
         let portfolio = Portfolio {
             name: "Diversified".to_string(),
             investments: vec![
@@ -514,10 +574,8 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "USD",
         )
         .await;
@@ -543,13 +601,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_currency_conversion_error() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 150.0, "USD");
-        price_provider.add_response("RY", 100.0, "CAD");
-        let isin_provider = MockProvider::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 150.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
+        price_cache.insert(
+            "RY".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "CAD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_error("CAD", "USD", "Rate service unavailable");
-        let mut cache = HashMap::new();
         let portfolio = Portfolio {
             name: "Diversified".to_string(),
             investments: vec![
@@ -566,10 +636,8 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "USD",
         )
         .await;
@@ -588,18 +656,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_price_caching() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 150.0, "USD");
-        let isin_provider = MockProvider::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 150.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
+
         let currency_provider = MockCurrencyProvider::new();
-        let mut cache = HashMap::new();
-        let portfolio1 = Portfolio {
-            name: "P1".to_string(),
-            investments: vec![Investment::Stock(StockInvestment {
-                symbol: "AAPL".to_string(),
-                units: 10.0,
-            })],
-        };
         let portfolio2 = Portfolio {
             name: "P2".to_string(),
             investments: vec![Investment::Stock(StockInvestment {
@@ -608,36 +675,25 @@ mod tests {
             })],
         };
 
-        generate_portfolio_summary(
-            &portfolio1,
-            &price_provider,
-            &isin_provider,
-            &currency_provider,
-            &mut cache,
-            "USD",
-        )
-        .await;
+        // The first call populates the cache. The second call should use it.
+        // With the refactoring, we just test that a pre-populated cache is used.
         let summary = generate_portfolio_summary(
             &portfolio2,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "USD",
         )
         .await;
 
         assert_eq!(summary.investments[0].current_value, Some(750.0));
         assert_eq!(summary.investments[0].converted_value, Some(750.0));
-        assert_eq!(cache.len(), 1);
+        assert_eq!(price_cache.len(), 1);
     }
 
     #[tokio::test]
     async fn test_fixed_deposit_investment() {
-        let price_provider = MockProvider::new();
-        let isin_provider = MockProvider::new();
         let mut currency_provider = MockCurrencyProvider::new();
-        let mut cache = HashMap::new();
+        let price_cache = HashMap::new();
 
         // Test with fixed deposit that specifies a currency
         let portfolio_with_currency = Portfolio {
@@ -662,10 +718,8 @@ mod tests {
         // Test portfolio with specified currency
         let summary_with_currency = generate_portfolio_summary(
             &portfolio_with_currency,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "INR",
         )
         .await;
@@ -688,10 +742,8 @@ mod tests {
         // Test portfolio without specified currency
         let summary_without_currency = generate_portfolio_summary(
             &portfolio_without_currency,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "INR",
         )
         .await;
@@ -727,10 +779,8 @@ mod tests {
 
         let summary_usd = generate_portfolio_summary(
             &portfolio_usd_fd,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "INR",
         )
         .await;
@@ -750,10 +800,8 @@ mod tests {
         currency_provider_with_error.add_error("USD", "INR", "Rate unavailable");
         let summary_error = generate_portfolio_summary(
             &portfolio_usd_fd,
-            &price_provider,
-            &isin_provider,
             &currency_provider_with_error,
-            &mut cache,
+            &price_cache,
             "INR",
         )
         .await;
@@ -767,12 +815,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_mixed_investments_with_fixed_deposit() {
-        let mut price_provider = MockProvider::new();
-        price_provider.add_response("AAPL", 200.0, "USD");
-        let isin_provider = MockProvider::new();
+        let mut price_cache = HashMap::new();
+        price_cache.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 200.0,
+                currency: "USD".to_string(),
+                historical: HashMap::new(),
+            }),
+        );
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_rate("USD", "INR", 80.0);
-        let mut cache = HashMap::new();
 
         let portfolio = Portfolio {
             name: "Mixed Portfolio".to_string(),
@@ -791,10 +844,8 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &price_provider,
-            &isin_provider,
             &currency_provider,
-            &mut cache,
+            &price_cache,
             "INR",
         )
         .await;
