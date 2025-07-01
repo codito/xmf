@@ -21,10 +21,8 @@ impl AmfiProvider {
 #[derive(Debug, Deserialize)]
 struct AmfiResponse {
     nav: f64,
-    // Add other fields if needed for debugging or future use, e.g.:
-    // ISIN: String,
-    // name: String,
-    // date: String,
+    #[serde(default)]
+    historical_nav: Vec<(String, f64)>,
 }
 
 #[async_trait]
@@ -65,7 +63,41 @@ impl PriceProvider for AmfiProvider {
         let current_price = amfi_response.nav;
         let currency = "INR".to_string();
 
-        let historical = HashMap::new();
+        let mut historical = HashMap::new();
+
+        if !amfi_response.historical_nav.is_empty() {
+            let prices: Vec<_> = amfi_response
+                .historical_nav
+                .iter()
+                .filter_map(|(date_str, price)| {
+                    chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+                        .ok()
+                        .map(|date| (date, *price))
+                })
+                .collect();
+
+            if !prices.is_empty() {
+                let periods = [
+                    (HistoricalPeriod::OneWeek, chrono::Duration::weeks(1)),
+                    (HistoricalPeriod::OneMonth, chrono::Duration::weeks(4)),
+                    (HistoricalPeriod::OneYear, chrono::Duration::days(365)),
+                    (HistoricalPeriod::ThreeYears, chrono::Duration::days(365 * 3)),
+                    (HistoricalPeriod::FiveYears, chrono::Duration::days(365 * 5)),
+                ];
+
+                let now = chrono::Utc::now().date_naive();
+
+                for (period, duration) in periods {
+                    let period_start_date = now - duration;
+
+                    if let Some((_date, price)) =
+                        prices.iter().find(|(date, _)| *date >= period_start_date)
+                    {
+                        historical.insert(period, *price);
+                    }
+                }
+            }
+        }
 
         Ok(PriceResult {
             price: current_price,
