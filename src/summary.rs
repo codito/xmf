@@ -6,6 +6,7 @@ use anyhow::Result;
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
+use indicatif::ProgressBar;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -100,22 +101,25 @@ pub async fn generate_and_display_summaries(
     target_currency: &str,
 ) -> Result<()> {
     // Step 1: Generate summaries for each portfolio concurrently
-    let pb = ui::new_progress_bar(portfolios.len() as u64, true);
-    pb.set_message("Processing portfolios...");
+    let total_investments: u64 = portfolios
+        .iter()
+        .map(|p| p.investments.len())
+        .sum::<usize>() as u64;
+    let pb = ui::new_progress_bar(total_investments, true);
+    pb.set_message("Processing investments...");
 
     let summary_futures = portfolios.iter().map(|portfolio| {
         let pb_clone = pb.clone();
         async move {
-            let summary = generate_portfolio_summary(
+            generate_portfolio_summary(
                 portfolio,
                 symbol_provider,
                 isin_provider,
                 currency_provider,
                 target_currency,
+                pb_clone,
             )
-            .await;
-            pb_clone.inc(1);
-            summary
+            .await
         }
     });
 
@@ -162,10 +166,8 @@ pub async fn generate_portfolio_summary(
     isin_provider: &(dyn PriceProvider + Send + Sync),
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     portfolio_currency: &str,
+    pb: ProgressBar,
 ) -> PortfolioSummary {
-    let pb = ui::new_progress_bar(portfolio.investments.len() as u64, true);
-    pb.set_message(format!("Processing '{}'...", portfolio.name));
-
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
         total_value: None,
@@ -215,7 +217,7 @@ pub async fn generate_portfolio_summary(
                 }
             }
             summary.investments.push(investment_summary);
-            pb.inc(1);
+            pb.inc(1); // Increment the passed-in progress bar
             continue;
         }
 
@@ -303,7 +305,7 @@ pub async fn generate_portfolio_summary(
             }
         };
         summary.investments.push(investment_summary);
-        pb.inc(1);
+        pb.inc(1); // Increment the passed-in progress bar
     }
 
     if all_valid {
@@ -441,6 +443,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
+            ui::new_progress_bar(portfolio.investments.len() as u64, false),
         )
         .await;
 
@@ -490,6 +493,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
+            ui::new_progress_bar(portfolio.investments.len() as u64, false),
         )
         .await;
 
@@ -545,6 +549,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
+            ui::new_progress_bar(portfolio.investments.len() as u64, false),
         )
         .await;
 
@@ -609,6 +614,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
+            ui::new_progress_bar(portfolio.investments.len() as u64, false),
         )
         .await;
 
@@ -657,6 +663,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
+            ui::new_progress_bar(portfolio.investments.len() as u64, false),
         )
         .await;
 
