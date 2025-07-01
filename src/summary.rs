@@ -326,7 +326,7 @@ pub async fn generate_portfolio_summary(
         summary.total_value = None; // Reset original total_value too if any error
     }
 
-    pb.finish_and_clear();
+    // The progress bar is managed by the calling function, so no finish_and_clear here.
 
     summary
 }
@@ -663,7 +663,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
-            ui::new_progress_bar(portfolio.investments.len() as u64, false),
+            ui::new_progress_bar(portfolio_with_currency.investments.len() as u64, false),
         )
         .await;
 
@@ -689,6 +689,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
+            ui::new_progress_bar(portfolio_without_currency.investments.len() as u64, false),
         )
         .await;
 
@@ -728,6 +729,7 @@ mod tests {
             &isin_provider,
             &currency_provider_with_rate,
             "INR",
+            ui::new_progress_bar(portfolio_usd_fd.investments.len() as u64, false),
         )
         .await;
 
@@ -750,6 +752,7 @@ mod tests {
             &isin_provider,
             &currency_provider_with_error,
             "INR",
+            ui::new_progress_bar(portfolio_usd_fd.investments.len() as u64, false),
         )
         .await;
 
