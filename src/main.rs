@@ -17,6 +17,12 @@ struct Cli {
 enum Commands {
     /// Create default configuration
     Setup,
+    /// Display portfolio summary
+    Summary {
+        /// Path to optional configuration file
+        #[arg(short, long)]
+        config_path: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -27,7 +33,11 @@ async fn main() -> Result<()> {
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        None => xmf::run(None).await,
+        Some(Commands::Summary { config_path }) => xmf::run(config_path.as_deref()).await,
+        None => {
+            Cli::command().print_help()?;
+            Ok(())
+        }
     };
 
     if let Err(e) = &result {
