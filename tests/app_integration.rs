@@ -40,7 +40,8 @@ async fn test_real_yahoo_currency_api() {
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let provider = YahooCurrencyProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
     let to_currency = "EUR";
@@ -178,7 +179,8 @@ async fn test_real_yahoo_finance_api() {
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let provider = YahooFinanceProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
     info!(?symbol, "Fetching price from Yahoo Finance");
@@ -217,7 +219,8 @@ async fn test_real_amfi_api() {
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let provider = AmfiProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
     let isin = "INF789F01XA0";
