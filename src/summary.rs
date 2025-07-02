@@ -415,6 +415,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -457,6 +458,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         symbol_provider.add_error("MSFT", "API unavailable");
@@ -505,6 +507,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         symbol_provider.add_price(
@@ -513,6 +516,7 @@ mod tests {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -570,6 +574,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         symbol_provider.add_price(
@@ -578,6 +583,7 @@ mod tests {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -761,6 +767,7 @@ mod tests {
                 price: 200.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
+                short_name: None,
             },
         );
         let isin_provider = MockPriceProvider::new();
