@@ -1,12 +1,11 @@
-use crate::config::{FixedDepositInvestment, Portfolio};
+use crate::config::Portfolio;
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::PriceProvider;
 use crate::ui;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
-use indicatif::ProgressBar;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -117,7 +116,7 @@ pub async fn generate_and_display_summaries(
                 isin_provider,
                 currency_provider,
                 target_currency,
-                pb_clone,
+                &|| pb_clone.inc(1),
             )
             .await
         }
@@ -160,47 +159,41 @@ pub async fn generate_and_display_summaries(
     Ok(())
 }
 
-async fn handle_fixed_deposit(
-    fd: &FixedDepositInvestment,
+async fn convert_currency(
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    identifier: &str,
+    current_value: &f64,
+    current_currency: &str,
     portfolio_currency: &str,
-    pb: &ProgressBar,
-) -> InvestmentSummary {
-    let mut investment_summary = InvestmentSummary {
-        symbol: fd.name.clone(),
-        units: None,
-        current_price: None,
-        current_value: Some(fd.value),
-        converted_value: None,
-        currency: fd.currency.clone(),
-        weight_pct: None,
-        error: None,
-    };
-
-    let fd_currency = fd.currency.as_deref().unwrap_or(portfolio_currency);
-    investment_summary.currency = Some(fd_currency.to_string());
-
-    if fd_currency == portfolio_currency {
-        investment_summary.converted_value = Some(fd.value);
-    } else {
-        match currency_provider
-            .get_rate(fd_currency, portfolio_currency)
-            .await
-        {
-            Ok(rate) => {
-                investment_summary.converted_value = Some(fd.value * rate);
-            }
-            Err(e) => {
-                investment_summary.error = Some(format!(
-                    "Currency conversion failed from {} to {}: {}",
-                    fd_currency, portfolio_currency, e
-                ));
-            }
-        }
+) -> Result<f64> {
+    if current_currency == portfolio_currency {
+        debug!(
+            "No currency conversion needed for {identifier} ({current_currency} -> {portfolio_currency})",
+        );
+        return Ok(*current_value);
     }
 
-    pb.inc(1);
-    investment_summary
+    debug!(
+        "Attempting currency conversion for {identifier} ({current_currency} -> {portfolio_currency})",
+    );
+    match currency_provider
+        .get_rate(current_currency, portfolio_currency)
+        .await
+    {
+        Ok(rate) => {
+            let converted_value = current_value * rate;
+            debug!(
+                "Converted {current_value} from {current_currency} to {portfolio_currency} at rate {rate}: {converted_value}",
+            );
+            Ok(converted_value)
+        }
+        Err(e) => {
+            debug!("Currency conversion error for {}: {}", identifier, e);
+            Err(anyhow!(format!(
+                "Currency conversion failed from {current_currency} to {portfolio_currency}: {e}",
+            )))
+        }
+    }
 }
 
 pub async fn generate_portfolio_summary(
@@ -209,7 +202,7 @@ pub async fn generate_portfolio_summary(
     isin_provider: &(dyn PriceProvider + Send + Sync),
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     portfolio_currency: &str,
-    pb: ProgressBar,
+    update_callback: &(dyn Fn()),
 ) -> PortfolioSummary {
     let mut summary = PortfolioSummary {
         name: portfolio.name.clone(),
@@ -223,109 +216,85 @@ pub async fn generate_portfolio_summary(
     let mut all_valid = true;
 
     for investment in &portfolio.investments {
-        if let Investment::FixedDeposit(fd) = investment {
-            let investment_summary = handle_fixed_deposit(
-                fd,
-                currency_provider,
-                portfolio_currency,
-                &pb,
-            ).await;
-
-            if let Some(conv_value) = investment_summary.converted_value {
-                total_converted_value += conv_value;
-            } else if investment_summary.error.is_some() {
-                all_valid = false;
-            }
-
-            summary.investments.push(investment_summary);
-            continue;
-        }
-
-        let (identifier, units, provider) = match investment {
+        let (identifier, units, provider, currency, value) = match investment {
+            crate::config::Investment::FixedDeposit(fd) => (
+                fd.name.clone(),
+                None,
+                None,
+                fd.currency.clone().or(Some(portfolio_currency.to_string())),
+                Some(fd.value),
+            ),
             crate::config::Investment::Stock(s) => (
                 s.symbol.clone(),
-                s.units,
-                symbol_provider as &(dyn PriceProvider + Send + Sync),
+                Some(s.units),
+                Some(symbol_provider as &(dyn PriceProvider + Send + Sync)),
+                None,
+                None,
             ),
             crate::config::Investment::MutualFund(mf) => (
                 mf.isin.clone(),
-                mf.units,
-                isin_provider as &(dyn PriceProvider + Send + Sync),
+                Some(mf.units),
+                Some(isin_provider as &(dyn PriceProvider + Send + Sync)),
+                None,
+                None,
             ),
-            _ => unreachable!(),
         };
-
-        let price_result = provider.fetch_price(&identifier).await;
 
         let mut investment_summary = InvestmentSummary {
             symbol: identifier.clone(),
-            units: Some(units),
+            units,
             current_price: None,
-            current_value: None,
+            current_value: value,
             converted_value: None,
-            currency: None,
+            currency,
             weight_pct: None,
             error: None,
         };
 
-        match price_result {
-            Ok(price_data) => {
-                let value = units * price_data.price;
-                investment_summary.current_price = Some(price_data.price);
-                investment_summary.current_value = Some(value);
-                investment_summary.currency = Some(price_data.currency.clone());
-
-                // Perform currency conversion if needed
-                if price_data.currency == portfolio_currency {
-                    debug!(
-                        "No currency conversion needed for {} ({} -> {})",
-                        identifier, price_data.currency, portfolio_currency
-                    );
-                    total_converted_value += value;
-                    investment_summary.converted_value = Some(value);
-                } else {
-                    debug!(
-                        "Attempting currency conversion for {} ({} -> {})",
-                        identifier, price_data.currency, portfolio_currency
-                    );
-                    match currency_provider
-                        .get_rate(&price_data.currency, portfolio_currency)
-                        .await
-                    {
-                        Ok(rate) => {
-                            let converted_value = value * rate;
-                            total_converted_value += converted_value;
-                            investment_summary.converted_value = Some(converted_value);
-                            debug!(
-                                "Converted {} from {} to {} at rate {}: {}",
-                                value,
-                                price_data.currency,
-                                portfolio_currency,
-                                rate,
-                                converted_value
-                            );
-                        }
-                        Err(e) => {
-                            investment_summary.error = Some(format!(
-                                "Currency conversion failed from {} to {}: {}",
-                                price_data.currency, portfolio_currency, e
-                            ));
-                            all_valid = false;
-                            debug!("Currency conversion error for {}: {}", identifier, e);
-                        }
-                    }
+        if let Some(p) = provider {
+            match p.fetch_price(&identifier).await {
+                Ok(price_data) => {
+                    let value = units.unwrap() * price_data.price;
+                    investment_summary.current_price = Some(price_data.price);
+                    investment_summary.current_value = Some(value);
+                    investment_summary.currency = Some(price_data.currency.clone());
                 }
-
-                portfolio_value += value;
-            }
-            Err(e) => {
-                all_valid = false;
-                investment_summary.error = Some(e.to_string());
-                debug!("Price fetch error for {}: {}", identifier, e);
+                Err(e) => {
+                    all_valid = false;
+                    investment_summary.error = Some(e.to_string());
+                    debug!("Price fetch error for {}: {}", identifier, e);
+                }
             }
         };
+
+        // No need for currency conversion if there's an error
+        if investment_summary.error.is_none() {
+            // Perform currency conversion if needed
+            let current_value = investment_summary.current_value.unwrap();
+            let current_currency = investment_summary.currency.as_ref().unwrap();
+            match convert_currency(
+                currency_provider,
+                &investment_summary.symbol,
+                &current_value,
+                current_currency,
+                portfolio_currency,
+            )
+            .await
+            {
+                Ok(converted_value) => {
+                    total_converted_value += converted_value;
+                    investment_summary.converted_value = Some(converted_value);
+                }
+                Err(e) => {
+                    all_valid = false;
+                    investment_summary.error = Some(e.to_string());
+                }
+            }
+
+            portfolio_value += current_value;
+        }
         summary.investments.push(investment_summary);
-        pb.inc(1); // Increment the passed-in progress bar
+        update_callback();
     }
 
     if all_valid {
@@ -463,7 +432,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
-            ui::new_progress_bar(portfolio.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -513,7 +482,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
-            ui::new_progress_bar(portfolio.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -569,7 +538,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
-            ui::new_progress_bar(portfolio.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -634,7 +603,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "USD",
-            ui::new_progress_bar(portfolio.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -683,7 +652,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
-            ui::new_progress_bar(portfolio_with_currency.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -709,7 +678,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
-            ui::new_progress_bar(portfolio_without_currency.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -749,7 +718,7 @@ mod tests {
             &isin_provider,
             &currency_provider_with_rate,
             "INR",
-            ui::new_progress_bar(portfolio_usd_fd.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -772,7 +741,7 @@ mod tests {
             &isin_provider,
             &currency_provider_with_error,
             "INR",
-            ui::new_progress_bar(portfolio_usd_fd.investments.len() as u64, false),
+            &|| (),
         )
         .await;
 
@@ -819,6 +788,7 @@ mod tests {
             &isin_provider,
             &currency_provider,
             "INR",
+            &|| (),
         )
         .await;
 
