@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,7 +31,13 @@ fn extract_historical_prices(
             .and_then(|inds| inds.quote.first())
             .and_then(|q| q.close.as_ref()),
     ) {
-        let now = Utc::now();
+        let reference_date = match timestamps
+            .last()
+            .and_then(|ts| Utc.timestamp_opt(*ts, 0).single())
+        {
+            Some(dt) => dt,
+            None => return historical_changes,
+        };
 
         for period in [
             HistoricalPeriod::OneDay,
@@ -54,7 +60,7 @@ fn extract_historical_prices(
             }
 
             // Other periods
-            let target_date = now - period.to_duration();
+            let target_date = reference_date - period.to_duration();
             if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
                 if price > 0.0 {
                     let change = ((current_price - price) / price) * 100.0;
