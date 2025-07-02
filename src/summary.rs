@@ -48,11 +48,7 @@ impl PortfolioSummary {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
 
             let symbol_cell_content = if let Some(name) = &investment.short_name {
-                format!(
-                    "{}\n{}",
-                    investment.symbol,
-                    ui::style_text(name, ui::StyleType::Subtle)
-                )
+                name.clone()
             } else {
                 investment.symbol.clone()
             };

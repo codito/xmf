@@ -156,11 +156,7 @@ fn display_results(results: &[ChangeResult]) {
 
     for result in results {
         let identifier_cell_content = if let Some(name) = &result.short_name {
-            format!(
-                "{}\n{}",
-                result.identifier,
-                ui::style_text(name, ui::StyleType::Subtle)
-            )
+            name.clone()
         } else {
             result.identifier.clone()
         };
