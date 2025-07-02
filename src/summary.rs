@@ -48,17 +48,11 @@ impl PortfolioSummary {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
 
             let symbol_cell_content = if let Some(name) = &investment.short_name {
-                // let mut truncated_name = name.clone();
-                // if truncated_name.len() > 16 {
-                //     truncated_name.truncate(13);
-                //     truncated_name.push_str("...");
-                // }
-                // format!(
-                //     "{}\n{}",
-                //     ui::style_text(&truncated_name, ui::StyleType::Subtle),
-                //     investment.symbol,
-                // )
-                name.clone()
+                format!(
+                    "{}\n{}",
+                    investment.symbol,
+                    ui::style_text(name, ui::StyleType::Subtle)
+                )
             } else {
                 investment.symbol.clone()
             };

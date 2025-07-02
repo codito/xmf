@@ -12,6 +12,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 struct ChangeResult {
     identifier: String,
+    short_name: Option<String>,
     changes: BTreeMap<HistoricalPeriod, f64>,
     error: Option<String>,
 }
@@ -80,12 +81,14 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
                     }
                     ChangeResult {
                         identifier: id,
+                        short_name: price_result.short_name,
                         changes,
                         error: None,
                     }
                 }
                 Err(e) => ChangeResult {
                     identifier: id,
+                    short_name: None,
                     changes: BTreeMap::new(),
                     error: Some(e.to_string()),
                 },
@@ -152,7 +155,16 @@ fn display_results(results: &[ChangeResult]) {
     table.set_header(header);
 
     for result in results {
-        let mut row_cells = vec![Cell::new(&result.identifier)];
+        let identifier_cell_content = if let Some(name) = &result.short_name {
+            format!(
+                "{}\n{}",
+                result.identifier,
+                ui::style_text(name, ui::StyleType::Subtle)
+            )
+        } else {
+            result.identifier.clone()
+        };
+        let mut row_cells = vec![Cell::new(identifier_cell_content)];
 
         for period in &periods {
             let cell = match result.changes.get(period) {
