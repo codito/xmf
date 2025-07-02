@@ -43,25 +43,22 @@ fn extract_historical_prices(
             HistoricalPeriod::TenYears,
         ] {
             if period == HistoricalPeriod::OneDay {
-                let one_day_base_price = chart_item
-                    .meta
-                    .previous_close
-                    .or_else(|| closes.iter().rev().find_map(|p| *p));
-
-                if let Some(price) = one_day_base_price {
+                if closes.len() >= 2 {
+                    let price = closes[closes.len() - 2].unwrap();
                     if price > 0.0 {
                         let change = ((current_price - price) / price) * 100.0;
                         historical_changes.insert(period, change);
                     }
                 }
-            } else {
-                let target_date = now - period.to_duration();
-                if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes)
-                {
-                    if price > 0.0 {
-                        let change = ((current_price - price) / price) * 100.0;
-                        historical_changes.insert(period, change);
-                    }
+                continue;
+            }
+
+            // Other periods
+            let target_date = now - period.to_duration();
+            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
+                if price > 0.0 {
+                    let change = ((current_price - price) / price) * 100.0;
+                    historical_changes.insert(period, change);
                 }
             }
         }
