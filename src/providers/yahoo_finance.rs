@@ -48,18 +48,8 @@ fn extract_historical_prices(
             HistoricalPeriod::FiveYears,
             HistoricalPeriod::TenYears,
         ] {
-            if period == HistoricalPeriod::OneDay {
-                if closes.len() >= 2 {
-                    let price = closes[closes.len() - 2].unwrap();
-                    if price > 0.0 {
-                        let change = ((current_price - price) / price) * 100.0;
-                        historical_changes.insert(period, change);
-                    }
-                }
-                continue;
-            }
-
-            // Other periods
+            // Logic is not perfect since we're not excluding weekends and other holidays.
+            // Use approximation to avoid multiple API calls to the providers.
             let target_date = reference_date - period.to_duration();
             if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
                 if price > 0.0 {
@@ -346,7 +336,10 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "USD");
-        assert_eq!(result.historical.len(), 6); // 10Y, 5Y, 3Y, 1Y, 1M, 5D
+
+        // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
+        // Also includes 1D since we set the last available data as reference
+        assert_eq!(result.historical.len(), 7);
 
         let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
         assert!(

@@ -106,8 +106,10 @@ impl PriceProvider for AmfiProvider {
                 ] {
                     let period_start_date = current_nav_date - period.to_duration();
 
-                    if let Some((_date, price)) =
-                        prices.iter().find(|(date, _)| *date >= period_start_date)
+                    if let Some((_date, price)) = prices
+                        .iter()
+                        .rev()
+                        .find(|(date, _)| *date <= period_start_date)
                     {
                         if *price > 0.0 {
                             let change = ((current_price - price) / price) * 100.0;
@@ -173,19 +175,19 @@ mod tests {
         let now = chrono::Utc::now().date_naive();
         let current_price = 150.0;
 
-        let date_5y = (now - chrono::Duration::days(365 * 5 - 10))
+        let date_5y = (now - chrono::Duration::days(365 * 5 - 1))
             .format("%Y-%m-%d")
             .to_string();
         let price_5y = 100.0;
-        let date_1y = (now - chrono::Duration::days(365 - 10))
+        let date_1y = (now - chrono::Duration::days(365))
             .format("%Y-%m-%d")
             .to_string();
         let price_1y = 120.0;
-        let date_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2))
+        let date_1m = (now - chrono::Duration::weeks(4) - chrono::Duration::days(2))
             .format("%Y-%m-%d")
             .to_string();
         let price_1m = 130.0;
-        let date_5d = (now - chrono::Duration::days(5) + chrono::Duration::days(1))
+        let date_5d = (now - chrono::Duration::days(5) - chrono::Duration::days(1))
             .format("%Y-%m-%d")
             .to_string();
         let price_5d = 140.0;
@@ -202,16 +204,23 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "INR");
-        assert_eq!(result.historical.len(), 6);
 
+        // 1d is added based on last price
+        // 10y is not available as last data is < 5y
+        // 5y is also ignored because we don't have a data point >= 5y
+        assert_eq!(result.historical.len(), 5);
+
+        assert!(!result.historical.contains_key(&HistoricalPeriod::TenYears));
+        assert!(!result.historical.contains_key(&HistoricalPeriod::FiveYears));
+
+        // 3y uses the data <5y
         let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
-                .abs()
-                < 0.001
-        );
-        assert!(
-            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_5y)
+            (result
+                .historical
+                .get(&HistoricalPeriod::ThreeYears)
+                .unwrap()
+                - expected_change_5y)
                 .abs()
                 < 0.001
         );
@@ -219,15 +228,6 @@ mod tests {
         let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
         assert!(
             (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
-                < 0.001
-        );
-        assert!(
-            (result
-                .historical
-                .get(&HistoricalPeriod::ThreeYears)
-                .unwrap()
-                - expected_change_1y)
-                .abs()
                 < 0.001
         );
 
@@ -252,11 +252,11 @@ mod tests {
         let now = chrono::Utc::now().date_naive();
         let current_price = 150.0;
 
-        let date_1y = (now - chrono::Duration::days(365 - 10))
+        let date_1y = (now - chrono::Duration::days(365 + 10))
             .format("%Y-%m-%d")
             .to_string();
         let price_1y = 120.0;
-        let date_1m = (now - chrono::Duration::weeks(4) + chrono::Duration::days(2))
+        let date_1m = (now - chrono::Duration::weeks(4) - chrono::Duration::days(2))
             .format("%Y-%m-%d")
             .to_string();
         let price_1m = 130.0;
@@ -271,9 +271,10 @@ mod tests {
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
 
-        // 1D, 5D are missing as the closest data is >1 month old
-        // 10Y, 5Y, 3Y will resolve to the 1Y price. 1Y and 1M will resolve to their respective prices.
-        assert_eq!(result.historical.len(), 5);
+        // 1D, 5D will use the closest data >1 month old.
+        // 1Y and 1M will resolve to their respective prices.
+        // 10Y, 5Y, 3Y will not be available since we don't have the data points.
+        assert_eq!(result.historical.len(), 4, "{:?}", result.historical);
 
         let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
         assert!(
@@ -288,24 +289,12 @@ mod tests {
                 < 0.001
         );
         assert!(
-            (result
+            !result
                 .historical
-                .get(&HistoricalPeriod::ThreeYears)
-                .unwrap()
-                - expected_change_1y)
-                .abs()
-                < 0.001
+                .contains_key(&HistoricalPeriod::ThreeYears)
         );
-        assert!(
-            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_1y)
-                .abs()
-                < 0.001
-        );
-        assert!(
-            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_1y)
-                .abs()
-                < 0.001
-        );
+        assert!(!result.historical.contains_key(&HistoricalPeriod::FiveYears));
+        assert!(!result.historical.contains_key(&HistoricalPeriod::TenYears));
     }
 
     #[tokio::test]
