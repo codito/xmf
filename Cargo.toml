@@ -11,6 +11,7 @@ clap = { version = "4.4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 directories = "6.0"
+futures = "0.3"
 reqwest = { version = "0.11", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1.0"
@@ -21,6 +22,7 @@ rust_finprim = "0.4.0"
 comfy-table = "7.1.4"
 console = "0.16.0"
 indicatif = "0.17.12"
+chrono = { version = "0.4.41", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.8"

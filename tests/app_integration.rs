@@ -6,10 +6,7 @@ mod test_utils {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    pub async fn create_mock_server(
-        symbol: &str,
-        mock_response: &'static str,
-    ) -> wiremock::MockServer {
+    pub async fn create_mock_server(symbol: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = wiremock::MockServer::start().await;
         let url_path = format!("/v8/finance/chart/{symbol}");
 
@@ -23,10 +20,7 @@ mod test_utils {
     }
 
     // New helper for AMFI mock server in integration tests
-    pub async fn create_amfi_mock_server(
-        isin: &str,
-        mock_response: &'static str,
-    ) -> wiremock::MockServer {
+    pub async fn create_amfi_mock_server(isin: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = MockServer::start().await;
         let url_path = format!("/{isin}"); // AMFI provider uses format!("{}/{}", self.base_url, identifier);
 
@@ -46,7 +40,8 @@ async fn test_real_yahoo_currency_api() {
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let provider = YahooCurrencyProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
     let to_currency = "EUR";
@@ -116,22 +111,38 @@ async fn test_full_app_flow_with_amfi_mock() {
 
 #[test_log::test(tokio::test)]
 async fn test_full_app_flow_with_mock() {
+    use chrono::{Duration, Utc};
+
+    let now = Utc::now();
+    let ts_1y = (now - Duration::days(364)).timestamp();
+    let price_1y = 150.0;
+    let ts_1m = (now - Duration::days(30)).timestamp();
+    let price_1m = 165.0;
+
     // Setup mock server
-    let mock_response = r#"
-    {
-        "chart": {
+    let mock_response = format!(
+        r#"
+    {{
+        "chart": {{
             "result": [
-                {
-                    "meta": {
+                {{
+                    "meta": {{
                         "regularMarketPrice": 175.5,
                         "currency": "USD"
-                    }
-                }
+                    }},
+                    "timestamp": [{ts_1y}, {ts_1m}],
+                    "indicators": {{
+                        "quote": [{{
+                            "close": [{price_1y}, {price_1m}]
+                        }}]
+                    }}
+                }}
             ]
-        }
-    }"#;
+        }}
+    }}"#,
+    );
 
-    let mock_server = test_utils::create_mock_server("AAPL", mock_response).await;
+    let mock_server = test_utils::create_mock_server("AAPL", &mock_response).await;
 
     // Setup config file
     let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
@@ -168,7 +179,8 @@ async fn test_real_yahoo_finance_api() {
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let provider = YahooFinanceProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
     info!(?symbol, "Fetching price from Yahoo Finance");
@@ -183,6 +195,10 @@ async fn test_real_yahoo_finance_api() {
             assert!(
                 !price_result.currency.is_empty(),
                 "Currency should not be empty"
+            );
+            assert!(
+                !price_result.historical.is_empty(),
+                "Historical data should not be empty"
             );
 
             info!(
@@ -203,7 +219,8 @@ async fn test_real_amfi_api() {
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let provider = AmfiProvider::new(base_url);
+    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
     let isin = "INF789F01XA0";
@@ -218,6 +235,10 @@ async fn test_real_amfi_api() {
             assert_eq!(
                 price_result.currency, "INR",
                 "Currency should be Indian Rupee"
+            );
+            assert!(
+                !price_result.historical.is_empty(),
+                "Price history should be non-empty"
             );
 
             info!(
