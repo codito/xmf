@@ -25,6 +25,7 @@ impl AmfiProvider {
 #[derive(Debug, Deserialize)]
 struct AmfiResponse {
     nav: f64,
+    date: String,
     #[serde(default)]
     historical_nav: Vec<(String, f64)>,
 }
@@ -85,7 +86,15 @@ impl PriceProvider for AmfiProvider {
                 .collect();
 
             if !prices.is_empty() {
-                let now = chrono::Utc::now().date_naive();
+                let current_nav_date =
+                    chrono::NaiveDate::parse_from_str(&amfi_response.date, "%Y-%m-%d")
+                        .unwrap_or_else(|e| {
+                            debug!(
+                                "Could not parse date from AMFI response for ISIN {}: '{}' ({}). Falling back to current date.",
+                                identifier, amfi_response.date, e
+                            );
+                            chrono::Utc::now().date_naive()
+                        });
                 for period in [
                     HistoricalPeriod::OneDay,
                     HistoricalPeriod::FiveDays,
@@ -95,7 +104,7 @@ impl PriceProvider for AmfiProvider {
                     HistoricalPeriod::FiveYears,
                     HistoricalPeriod::TenYears,
                 ] {
-                    let period_start_date = now - period.to_duration();
+                    let period_start_date = current_nav_date - period.to_duration();
 
                     if let Some((_date, price)) =
                         prices.iter().find(|(date, _)| *date >= period_start_date)
@@ -147,7 +156,7 @@ mod tests {
     #[tokio::test]
     async fn test_successful_amfi_price_fetch() {
         let isin = "INF789F01XA0";
-        let mock_response = r#"{"nav": 123.45}"#;
+        let mock_response = r#"{"nav": 123.45, "date": "2024-01-01"}"#;
         let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
         let cache = Arc::new(Cache::new());
 
@@ -182,7 +191,8 @@ mod tests {
         let price_5d = 140.0;
 
         let mock_response = format!(
-            r#"{{"nav": {current_price}, "historical_nav": [["{date_5y}", {price_5y}], ["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}], ["{date_5d}", {price_5d}]]}}"#,
+            r#"{{"nav": {current_price}, "date": "{}", "historical_nav": [["{date_5y}", {price_5y}], ["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}], ["{date_5d}", {price_5d}]]}}"#,
+            now.format("%Y-%m-%d"),
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
@@ -252,7 +262,8 @@ mod tests {
         let price_1m = 130.0;
 
         let mock_response = format!(
-            r#"{{"nav": {current_price}, "historical_nav": [["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}]]}}"#,
+            r#"{{"nav": {current_price}, "date": "{}", "historical_nav": [["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}]]}}"#,
+            now.format("%Y-%m-%d"),
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
