@@ -118,6 +118,8 @@ struct PriceChartMeta {
     currency: String,
     #[serde(alias = "chartPreviousClose")]
     previous_close: Option<f64>,
+    #[serde(alias = "shortName")]
+    short_name: Option<String>,
 }
 
 #[async_trait]
@@ -156,6 +158,7 @@ impl PriceProvider for YahooFinanceProvider {
 
         let current_price = item.meta.regular_market_price;
         let currency = item.meta.currency.clone();
+        let short_name = item.meta.short_name.clone();
 
         let historical = extract_historical_prices(item, current_price);
 
@@ -163,6 +166,7 @@ impl PriceProvider for YahooFinanceProvider {
             price: current_price,
             currency,
             historical,
+            short_name,
         };
 
         self.cache.put(symbol.to_string(), result.clone()).await;
@@ -280,7 +284,8 @@ mod tests {
                 "result": [{
                     "meta": {
                         "regularMarketPrice": 150.65,
-                        "currency": "USD"
+                        "currency": "USD",
+                        "shortName": "Apple Inc."
                     }
                 }]
             }
@@ -293,6 +298,7 @@ mod tests {
         let result = provider.fetch_price("AAPL").await.unwrap();
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
+        assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
         assert!(result.historical.is_empty());
     }
 
@@ -315,7 +321,8 @@ mod tests {
                     "result": [{{
                         "meta": {{
                             "regularMarketPrice": {current_price},
-                            "currency": "USD"
+                            "currency": "USD",
+                            "shortName": "Apple Inc."
                         }},
                         "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
                         "indicators": {{
@@ -336,6 +343,7 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "USD");
+        assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
 
         // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
         // Also includes 1D since we set the last available data as reference

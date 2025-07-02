@@ -26,6 +26,7 @@ impl AmfiProvider {
 struct AmfiResponse {
     nav: f64,
     date: String,
+    name: Option<String>,
     #[serde(default)]
     historical_nav: Vec<(String, f64)>,
 }
@@ -71,6 +72,7 @@ impl PriceProvider for AmfiProvider {
 
         let current_price = amfi_response.nav;
         let currency = "INR".to_string();
+        let short_name = amfi_response.name;
 
         let mut historical = HashMap::new();
 
@@ -124,6 +126,7 @@ impl PriceProvider for AmfiProvider {
             price: current_price,
             currency,
             historical,
+            short_name,
         };
 
         self.cache.put(identifier.to_string(), result.clone()).await;
@@ -158,15 +161,17 @@ mod tests {
     #[tokio::test]
     async fn test_successful_amfi_price_fetch() {
         let isin = "INF789F01XA0";
-        let mock_response = r#"{"nav": 123.45, "date": "2024-01-01"}"#;
+        let mock_response = r#"{"nav": 123.45, "date": "2024-01-01", "name": "My Fund"}"#;
         let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
         let cache = Arc::new(Cache::new());
 
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
+        assert_eq!(result.short_name, Some("My Fund".to_string()));
 
         assert_eq!(result.price, 123.45);
         assert_eq!(result.currency, "INR");
+        assert_eq!(result.short_name, Some("My Fund".to_string()));
     }
 
     #[tokio::test]
@@ -193,7 +198,7 @@ mod tests {
         let price_5d = 140.0;
 
         let mock_response = format!(
-            r#"{{"nav": {current_price}, "date": "{}", "historical_nav": [["{date_5y}", {price_5y}], ["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}], ["{date_5d}", {price_5d}]]}}"#,
+            r#"{{"nav": {current_price}, "date": "{}", "name": "My Fund", "historical_nav": [["{date_5y}", {price_5y}], ["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}], ["{date_5d}", {price_5d}]]}}"#,
             now.format("%Y-%m-%d"),
         );
 
@@ -204,6 +209,7 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "INR");
+        assert_eq!(result.short_name, Some("My Fund".to_string()));
 
         // 1d is added based on last price
         // 10y is not available as last data is < 5y
@@ -262,7 +268,7 @@ mod tests {
         let price_1m = 130.0;
 
         let mock_response = format!(
-            r#"{{"nav": {current_price}, "date": "{}", "historical_nav": [["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}]]}}"#,
+            r#"{{"nav": {current_price}, "date": "{}", "name": "My Fund", "historical_nav": [["{date_1y}", {price_1y}], ["{date_1m}", {price_1m}]]}}"#,
             now.format("%Y-%m-%d"),
         );
 
