@@ -1,4 +1,4 @@
-use crate::config::Portfolio;
+use crate::config::{FixedDepositInvestment, Portfolio};
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::PriceProvider;
 use crate::ui;
@@ -160,6 +160,49 @@ pub async fn generate_and_display_summaries(
     Ok(())
 }
 
+async fn handle_fixed_deposit(
+    fd: &FixedDepositInvestment,
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    portfolio_currency: &str,
+    pb: &ProgressBar,
+) -> InvestmentSummary {
+    let mut investment_summary = InvestmentSummary {
+        symbol: fd.name.clone(),
+        units: None,
+        current_price: None,
+        current_value: Some(fd.value),
+        converted_value: None,
+        currency: fd.currency.clone(),
+        weight_pct: None,
+        error: None,
+    };
+
+    let fd_currency = fd.currency.as_deref().unwrap_or(portfolio_currency);
+    investment_summary.currency = Some(fd_currency.to_string());
+
+    if fd_currency == portfolio_currency {
+        investment_summary.converted_value = Some(fd.value);
+    } else {
+        match currency_provider
+            .get_rate(fd_currency, portfolio_currency)
+            .await
+        {
+            Ok(rate) => {
+                investment_summary.converted_value = Some(fd.value * rate);
+            }
+            Err(e) => {
+                investment_summary.error = Some(format!(
+                    "Currency conversion failed from {} to {}: {}",
+                    fd_currency, portfolio_currency, e
+                ));
+            }
+        }
+    }
+
+    pb.inc(1);
+    investment_summary
+}
+
 pub async fn generate_portfolio_summary(
     portfolio: &Portfolio,
     symbol_provider: &(dyn PriceProvider + Send + Sync),
@@ -180,44 +223,21 @@ pub async fn generate_portfolio_summary(
     let mut all_valid = true;
 
     for investment in &portfolio.investments {
-        if let crate::config::Investment::FixedDeposit(fd) = investment {
-            let mut investment_summary = InvestmentSummary {
-                symbol: fd.name.clone(),
-                units: None,
-                current_price: None,
-                current_value: Some(fd.value),
-                converted_value: None,
-                currency: fd.currency.clone(),
-                weight_pct: None,
-                error: None,
-            };
+        if let Investment::FixedDeposit(fd) = investment {
+            let investment_summary = handle_fixed_deposit(
+                fd,
+                currency_provider,
+                portfolio_currency,
+                &pb,
+            ).await;
 
-            let fd_currency = fd.currency.as_deref().unwrap_or(portfolio_currency);
-            investment_summary.currency = Some(fd_currency.to_string());
-
-            if fd_currency == portfolio_currency {
-                total_converted_value += fd.value;
-                investment_summary.converted_value = Some(fd.value);
-            } else {
-                match currency_provider
-                    .get_rate(fd_currency, portfolio_currency)
-                    .await
-                {
-                    Ok(rate) => {
-                        let converted_value = fd.value * rate;
-                        total_converted_value += converted_value;
-                        investment_summary.converted_value = Some(converted_value);
-                    }
-                    Err(e) => {
-                        investment_summary.error = Some(format!(
-                            "Currency conversion failed from {fd_currency} to {portfolio_currency}: {e}",
-                        ));
-                        all_valid = false;
-                    }
-                }
+            if let Some(conv_value) = investment_summary.converted_value {
+                total_converted_value += conv_value;
+            } else if investment_summary.error.is_some() {
+                all_valid = false;
             }
+
             summary.investments.push(investment_summary);
-            pb.inc(1); // Increment the passed-in progress bar
             continue;
         }
 
