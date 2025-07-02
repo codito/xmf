@@ -11,6 +11,7 @@ use tracing::debug;
 #[derive(Debug, Clone)]
 pub struct InvestmentSummary {
     pub symbol: String,
+    pub short_name: Option<String>,
     pub units: Option<f64>,
     pub current_price: Option<f64>,
     pub current_value: Option<f64>,
@@ -46,6 +47,21 @@ impl PortfolioSummary {
         for investment in &self.investments {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
 
+            let symbol_cell_content = if let Some(name) = &investment.short_name {
+                let mut truncated_name = name.clone();
+                if truncated_name.len() > 16 {
+                    truncated_name.truncate(13);
+                    truncated_name.push_str("...");
+                }
+                format!(
+                    "{}\n{}",
+                    investment.symbol,
+                    ui::style_text(&truncated_name, ui::StyleType::Subtle)
+                )
+            } else {
+                investment.symbol.clone()
+            };
+
             let units = ui::format_optional_cell(investment.units, |u| format!("{u:.2}"));
             let current_price =
                 ui::format_optional_cell(investment.current_price, |p| format!("{p:.2}{currency}"));
@@ -55,7 +71,7 @@ impl PortfolioSummary {
                 ui::format_optional_cell(investment.weight_pct, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
-                Cell::new(&investment.symbol),
+                Cell::new(symbol_cell_content),
                 units,
                 current_price,
                 converted_value,
@@ -249,6 +265,7 @@ pub async fn generate_portfolio_summary(
             currency,
             weight_pct: None,
             error: None,
+            short_name: None,
         };
 
         if let Some(p) = provider {
@@ -258,6 +275,7 @@ pub async fn generate_portfolio_summary(
                     investment_summary.current_price = Some(price_data.price);
                     investment_summary.current_value = Some(value);
                     investment_summary.currency = Some(price_data.currency.clone());
+                    investment_summary.short_name = price_data.short_name.clone();
                 }
                 Err(e) => {
                     all_valid = false;
@@ -415,7 +433,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Apple Inc.".to_string()),
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -446,6 +464,10 @@ mod tests {
         assert_eq!(summary.investments[0].converted_value, Some(1500.0));
         assert_eq!(summary.investments[0].weight_pct, Some(100.0));
         assert_eq!(summary.investments[0].error, None);
+        assert_eq!(
+            summary.investments[0].short_name,
+            Some("Apple Inc.".to_string())
+        );
     }
 
     #[tokio::test]
@@ -458,7 +480,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Apple Inc.".to_string()),
             },
         );
         symbol_provider.add_error("MSFT", "API unavailable");
@@ -491,6 +513,10 @@ mod tests {
         assert!(summary.converted_value.is_none());
         assert_eq!(summary.investments[0].error, None);
         assert_eq!(
+            summary.investments[0].short_name,
+            Some("Apple Inc.".to_string())
+        );
+        assert_eq!(
             summary.investments[1].error.as_deref(),
             Some("API unavailable")
         );
@@ -507,7 +533,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Apple Inc.".to_string()),
             },
         );
         symbol_provider.add_price(
@@ -516,7 +542,7 @@ mod tests {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Royal Bank of Canada".to_string()),
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -556,8 +582,13 @@ mod tests {
             summary.investments[0].weight_pct,
             Some((1500.0 / 2250.0) * 100.0)
         );
+        assert_eq!(
+            summary.investments[0].short_name,
+            Some("Apple Inc.".to_string())
+        );
         assert_eq!(summary.investments[1].symbol, "RY");
         assert_eq!(summary.investments[1].current_value, Some(1000.0));
+        assert_eq!(summary.investments[1].short_name, Some("Royal Bank of Canada".to_string()));
         assert_eq!(summary.investments[1].converted_value, Some(750.0));
         assert_eq!(
             summary.investments[1].weight_pct,
@@ -574,7 +605,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Apple".to_string()),
             },
         );
         symbol_provider.add_price(
@@ -583,7 +614,7 @@ mod tests {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Royal Bank".to_string()),
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -615,11 +646,14 @@ mod tests {
 
         assert!(summary.converted_value.is_none());
         assert_eq!(summary.investments[0].error, None);
+        assert_eq!(summary.investments[0].short_name, Some("Apple".to_string()));
         assert_eq!(
             summary.investments[1].error,
-            Some(
-                "Currency conversion failed from CAD to USD: Rate service unavailable".to_string()
-            )
+            Some("Currency conversion failed from CAD to USD: Rate service unavailable".to_string())
+        );
+        assert_eq!(
+            summary.investments[1].short_name,
+            Some("Royal Bank".to_string())
         );
         assert!(summary.investments[0].converted_value.is_some());
         assert!(summary.investments[1].converted_value.is_none());
@@ -767,7 +801,7 @@ mod tests {
                 price: 200.0,
                 currency: "USD".to_string(),
                 historical: HashMap::new(),
-                short_name: None,
+                short_name: Some("Apple Inc.".to_string()),
             },
         );
         let isin_provider = MockPriceProvider::new();
@@ -815,7 +849,12 @@ mod tests {
             .unwrap();
 
         assert_eq!(aapl_summary.converted_value, Some(160000.0));
+        assert_eq!(
+            aapl_summary.short_name,
+            Some("Apple Inc.".to_string())
+        );
         assert_eq!(fd_summary.converted_value, Some(40000.0));
+        assert!(fd_summary.short_name.is_none());
 
         assert_eq!(aapl_summary.weight_pct, Some(80.0));
         assert_eq!(fd_summary.weight_pct, Some(20.0));
