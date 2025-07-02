@@ -10,6 +10,7 @@ pub enum StyleType {
     TotalLabel,
     TotalValue,
     Error,
+    Subtle,
 }
 
 /// Applies a consistent style to a string.
@@ -19,6 +20,7 @@ pub fn style_text(text: &str, style_type: StyleType) -> String {
         StyleType::TotalLabel => style(text).bold(),
         StyleType::TotalValue => style(text).green().bold(),
         StyleType::Error => style(text).red(),
+        StyleType::Subtle => style(text).dim(),
     };
     styled.to_string()
 }
