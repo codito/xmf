@@ -48,16 +48,17 @@ impl PortfolioSummary {
             let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
 
             let symbol_cell_content = if let Some(name) = &investment.short_name {
-                let mut truncated_name = name.clone();
-                if truncated_name.len() > 16 {
-                    truncated_name.truncate(13);
-                    truncated_name.push_str("...");
-                }
-                format!(
-                    "{}\n{}",
-                    investment.symbol,
-                    ui::style_text(&truncated_name, ui::StyleType::Subtle)
-                )
+                // let mut truncated_name = name.clone();
+                // if truncated_name.len() > 16 {
+                //     truncated_name.truncate(13);
+                //     truncated_name.push_str("...");
+                // }
+                // format!(
+                //     "{}\n{}",
+                //     ui::style_text(&truncated_name, ui::StyleType::Subtle),
+                //     investment.symbol,
+                // )
+                name.clone()
             } else {
                 investment.symbol.clone()
             };
@@ -588,7 +589,10 @@ mod tests {
         );
         assert_eq!(summary.investments[1].symbol, "RY");
         assert_eq!(summary.investments[1].current_value, Some(1000.0));
-        assert_eq!(summary.investments[1].short_name, Some("Royal Bank of Canada".to_string()));
+        assert_eq!(
+            summary.investments[1].short_name,
+            Some("Royal Bank of Canada".to_string())
+        );
         assert_eq!(summary.investments[1].converted_value, Some(750.0));
         assert_eq!(
             summary.investments[1].weight_pct,
@@ -649,7 +653,9 @@ mod tests {
         assert_eq!(summary.investments[0].short_name, Some("Apple".to_string()));
         assert_eq!(
             summary.investments[1].error,
-            Some("Currency conversion failed from CAD to USD: Rate service unavailable".to_string())
+            Some(
+                "Currency conversion failed from CAD to USD: Rate service unavailable".to_string()
+            )
         );
         assert_eq!(
             summary.investments[1].short_name,
@@ -849,10 +855,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(aapl_summary.converted_value, Some(160000.0));
-        assert_eq!(
-            aapl_summary.short_name,
-            Some("Apple Inc.".to_string())
-        );
+        assert_eq!(aapl_summary.short_name, Some("Apple Inc.".to_string()));
         assert_eq!(fd_summary.converted_value, Some(40000.0));
         assert!(fd_summary.short_name.is_none());
 
