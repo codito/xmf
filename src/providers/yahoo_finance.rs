@@ -42,13 +42,34 @@ fn extract_historical_prices(
             HistoricalPeriod::FiveYears,
             HistoricalPeriod::TenYears,
         ] {
-            let target_date = now - period.to_duration();
-            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
-                if price > 0.0 {
-                    let change = ((current_price - price) / price) * 100.0;
-                    historical_changes.insert(period, change);
+            if period == HistoricalPeriod::OneDay {
+                let one_day_base_price = chart_item
+                    .meta
+                    .previous_close
+                    .or_else(|| closes.iter().rev().find_map(|p| *p));
+
+                if let Some(price) = one_day_base_price {
+                    if price > 0.0 {
+                        let change = ((current_price - price) / price) * 100.0;
+                        historical_changes.insert(period, change);
+                    }
+                }
+            } else {
+                let target_date = now - period.to_duration();
+                if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes)
+                {
+                    if price > 0.0 {
+                        let change = ((current_price - price) / price) * 100.0;
+                        historical_changes.insert(period, change);
+                    }
                 }
             }
+        }
+    } else if let Some(prev_close) = chart_item.meta.previous_close {
+        // Handle case where we only have meta data (no historical bars)
+        if prev_close > 0.0 {
+            let change = ((current_price - prev_close) / prev_close) * 100.0;
+            historical_changes.insert(HistoricalPeriod::OneDay, change);
         }
     }
 
@@ -102,6 +123,8 @@ struct PriceChartMeta {
     #[serde(alias = "regularMarketPrice")]
     regular_market_price: f64,
     currency: String,
+    #[serde(alias = "chartPreviousClose")]
+    previous_close: Option<f64>,
 }
 
 #[async_trait]
