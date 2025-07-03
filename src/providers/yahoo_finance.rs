@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -31,7 +31,13 @@ fn extract_historical_prices(
             .and_then(|inds| inds.quote.first())
             .and_then(|q| q.close.as_ref()),
     ) {
-        let now = Utc::now();
+        let reference_date = match timestamps
+            .last()
+            .and_then(|ts| Utc.timestamp_opt(*ts, 0).single())
+        {
+            Some(dt) => dt,
+            None => return historical_changes,
+        };
 
         for period in [
             HistoricalPeriod::OneDay,
@@ -42,13 +48,21 @@ fn extract_historical_prices(
             HistoricalPeriod::FiveYears,
             HistoricalPeriod::TenYears,
         ] {
-            let target_date = now - period.to_duration();
+            // Logic is not perfect since we're not excluding weekends and other holidays.
+            // Use approximation to avoid multiple API calls to the providers.
+            let target_date = reference_date - period.to_duration();
             if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
                 if price > 0.0 {
                     let change = ((current_price - price) / price) * 100.0;
                     historical_changes.insert(period, change);
                 }
             }
+        }
+    } else if let Some(prev_close) = chart_item.meta.previous_close {
+        // Handle case where we only have meta data (no historical bars)
+        if prev_close > 0.0 {
+            let change = ((current_price - prev_close) / prev_close) * 100.0;
+            historical_changes.insert(HistoricalPeriod::OneDay, change);
         }
     }
 
@@ -102,6 +116,10 @@ struct PriceChartMeta {
     #[serde(alias = "regularMarketPrice")]
     regular_market_price: f64,
     currency: String,
+    #[serde(alias = "chartPreviousClose")]
+    previous_close: Option<f64>,
+    #[serde(alias = "shortName")]
+    short_name: Option<String>,
 }
 
 #[async_trait]
@@ -140,6 +158,7 @@ impl PriceProvider for YahooFinanceProvider {
 
         let current_price = item.meta.regular_market_price;
         let currency = item.meta.currency.clone();
+        let short_name = item.meta.short_name.clone();
 
         let historical = extract_historical_prices(item, current_price);
 
@@ -147,6 +166,7 @@ impl PriceProvider for YahooFinanceProvider {
             price: current_price,
             currency,
             historical,
+            short_name,
         };
 
         self.cache.put(symbol.to_string(), result.clone()).await;
@@ -264,7 +284,8 @@ mod tests {
                 "result": [{
                     "meta": {
                         "regularMarketPrice": 150.65,
-                        "currency": "USD"
+                        "currency": "USD",
+                        "shortName": "Apple Inc."
                     }
                 }]
             }
@@ -277,6 +298,7 @@ mod tests {
         let result = provider.fetch_price("AAPL").await.unwrap();
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
+        assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
         assert!(result.historical.is_empty());
     }
 
@@ -299,7 +321,8 @@ mod tests {
                     "result": [{{
                         "meta": {{
                             "regularMarketPrice": {current_price},
-                            "currency": "USD"
+                            "currency": "USD",
+                            "shortName": "Apple Inc."
                         }},
                         "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
                         "indicators": {{
@@ -320,7 +343,11 @@ mod tests {
 
         assert_eq!(result.price, current_price);
         assert_eq!(result.currency, "USD");
-        assert_eq!(result.historical.len(), 6); // 10Y, 5Y, 3Y, 1Y, 1M, 5D
+        assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
+
+        // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
+        // Also includes 1D since we set the last available data as reference
+        assert_eq!(result.historical.len(), 7);
 
         let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
         assert!(
