@@ -91,20 +91,18 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
 
     for (identifier, price_result) in fetched_results {
         match price_result {
-            Ok(price_data) => {
-                match calculate_cagr(&price_data) {
-                    Ok(cagr) => return_results.push(ReturnResult {
-                        identifier,
-                        cagr: Some(cagr),
-                        error: None,
-                    }),
-                    Err(e) => return_results.push(ReturnResult {
-                        identifier,
-                        cagr: None,
-                        error: Some(format!("CAGR calculation failed: {}", e)),
-                    }),
-                }
-            }
+            Ok(price_data) => match calculate_cagr(&price_data) {
+                Ok(cagr) => return_results.push(ReturnResult {
+                    identifier,
+                    cagr: Some(cagr),
+                    error: None,
+                }),
+                Err(e) => return_results.push(ReturnResult {
+                    identifier,
+                    cagr: None,
+                    error: Some(format!("CAGR calculation failed: {}", e)),
+                }),
+            },
             Err(e) => return_results.push(ReturnResult {
                 identifier,
                 cagr: None,
@@ -125,15 +123,13 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
 fn calculate_cagr(price_data: &PriceResult) -> Result<f64> {
     // Use 3-year historical price by default
     let period = HistoricalPeriod::ThreeYears;
-    
+
     if let Some(period_price) = price_data.historical.get(&period) {
-        let current_price = price_data
-            .price
-            .ok_or_else(|| anyhow!("Current price missing"))?;
+        let current_price = price_data.price;
 
         // Calculate time period in years
         let duration_years = period.to_duration().num_days() as f64 / 365.0;
-        
+
         // Calculate CAGR: [(current / historical)^(1/years) - 1] * 100
         let cagr = ((current_price / period_price).powf(1.0 / duration_years) - 1.0) * 100.0;
         Ok(cagr)
@@ -159,10 +155,7 @@ fn display_return_results(results: &[ReturnResult]) {
         } else {
             ui::na_cell(false)
         };
-        table.add_row(vec![
-            Cell::new(result.identifier.clone()),
-            cagr_cell,
-        ]);
+        table.add_row(vec![Cell::new(result.identifier.clone()), cagr_cell]);
     }
 
     println!("{table}");
