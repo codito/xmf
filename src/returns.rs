@@ -7,6 +7,8 @@ use crate::{
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use futures::future::join_all;
+use rust_decimal::prelude::*;
+use rust_finprim::rate::cagr;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -135,10 +137,32 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
 
     for &period in &periods {
         if let Some(historical_price) = price_data.historical.get(&period) {
-            let duration_years = period.to_duration().num_days() as f64 / 365.0;
-            let cagr = ((price_data.price / historical_price).powf(1.0 / duration_years) - 1.0)
-                * 100.0;
-            cagrs.insert(period, cagr);
+            if *historical_price <= 0.0 || price_data.price <= 0.0 {
+                continue;
+            }
+
+            let duration_days = period.to_duration().num_days() as f64;
+            let duration_years = duration_days / 365.0;
+
+            if duration_years <= 0.0 {
+                continue;
+            }
+
+            let begin_bal = Decimal::from_f64(*historical_price)
+                .ok_or_else(|| anyhow!("Invalid historical price"))?;
+            let end_bal = Decimal::from_f64(price_data.price)
+                .ok_or_else(|| anyhow!("Invalid current price"))?;
+            let n_years = Decimal::from_f64(duration_years)
+                .ok_or_else(|| anyhow!("Invalid duration"))?;
+
+            if n_years.is_zero() {
+                continue;
+            }
+
+            let rate = cagr(begin_bal, end_bal, n_years);
+            let percentage = (rate * Decimal::from(100)).to_f64()
+                .ok_or_else(|| anyhow!("CAGR percentage conversion failed"))?;
+            cagrs.insert(period, percentage);
         }
     }
 
