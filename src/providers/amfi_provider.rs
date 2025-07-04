@@ -222,7 +222,7 @@ mod tests {
         let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
         assert!(
             (result
-                .historical
+                .historical_prices
                 .get(&HistoricalPeriod::ThreeYears)
                 .unwrap()
                 - expected_change_5y)

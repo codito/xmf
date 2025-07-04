@@ -423,7 +423,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );
@@ -470,7 +470,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );
