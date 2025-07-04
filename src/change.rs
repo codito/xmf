@@ -79,7 +79,7 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
                     for (period, historical_price) in &price_result.historical_prices {
                         if *historical_price > 0.0 {
                             let change = ((price_result.price - historical_price) / historical_price) * 100.0;
-                            changes.insert(period, change);
+                            changes.insert(*period, change);
                         }
                     }
                     ChangeResult {

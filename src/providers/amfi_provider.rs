@@ -114,7 +114,6 @@ impl PriceProvider for AmfiProvider {
                         .find(|(date, _)| *date <= period_start_date)
                     {
                         if *price > 0.0 {
-                            let change = ((current_price - price) / price) * 100.0;
                             historical_prices.insert(period, *price);
                         }
                     }
