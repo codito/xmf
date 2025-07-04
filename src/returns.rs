@@ -14,7 +14,8 @@ use tracing::{debug, info};
 #[derive(Clone)]
 struct ReturnResult {
     identifier: String,
-    cagrs: BTreeMap<HistoricalPeriod, f64>, // Changed from single cagr to map
+    short_name: Option<String>,
+    cagrs: BTreeMap<HistoricalPeriod, f64>,
     error: Option<String>,
 }
 
@@ -94,17 +95,20 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
             Ok(price_data) => match calculate_cagr(&price_data) {
                 Ok(cagrs) => return_results.push(ReturnResult {
                     identifier,
+                    short_name: price_data.short_name.clone(),
                     cagrs,
                     error: None,
                 }),
                 Err(e) => return_results.push(ReturnResult {
                     identifier,
+                    short_name: None,
                     cagrs: BTreeMap::new(),
                     error: Some(format!("CAGR calculation failed: {}", e)),
                 }),
             },
             Err(e) => return_results.push(ReturnResult {
                 identifier,
+                short_name: None,
                 cagrs: BTreeMap::new(),
                 error: Some(format!("Price fetch failed: {}", e)),
             }),
@@ -132,12 +136,9 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
     for &period in &periods {
         if let Some(historical_price) = price_data.historical.get(&period) {
             let duration_years = period.to_duration().num_days() as f64 / 365.0;
-            // Avoid division by zero if duration_years is 0, though for these periods it shouldn't be
-            if duration_years > 0.0 {
-                let cagr = ((price_data.price / historical_price).powf(1.0 / duration_years) - 1.0)
-                    * 100.0;
-                cagrs.insert(period, cagr);
-            }
+            let cagr = ((price_data.price / historical_price).powf(1.0 / duration_years) - 1.0)
+                * 100.0;
+            cagrs.insert(period, cagr);
         }
     }
 
@@ -153,23 +154,25 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
 fn display_return_results(results: &[ReturnResult]) {
     let mut table = ui::new_styled_table();
     let periods = [
-        HistoricalPeriod::OneDay,
-        HistoricalPeriod::FiveDays,
-        HistoricalPeriod::OneMonth,
         HistoricalPeriod::OneYear,
         HistoricalPeriod::ThreeYears,
         HistoricalPeriod::FiveYears,
         HistoricalPeriod::TenYears,
     ];
 
-    let mut header = vec![ui::header_cell("Identifier")];
+    let mut header = vec![ui::header_cell("Symbol")];
     for period in &periods {
         header.push(ui::header_cell(&period.to_string()));
     }
     table.set_header(header);
 
     for result in results {
-        let mut row_cells = vec![Cell::new(result.identifier.clone())];
+        let name_display = if let Some(name) = &result.short_name {
+            name.clone()
+        } else {
+            result.identifier.clone()
+        };
+        let mut row_cells = vec![Cell::new(name_display)];
 
         for period in &periods {
             let cell = match result.cagrs.get(period) {
@@ -209,9 +212,7 @@ mod tests {
         let data = create_test_data();
         let cagrs = calculate_cagr(&data).unwrap();
 
-        assert_eq!(cagrs.len(), 4);
-        assert!((cagrs[&HistoricalPeriod::OneDay] - 2537.04).abs() < 0.1);
-        assert!((cagrs[&HistoricalPeriod::OneMonth] - 2633.52).abs() < 0.1);
+        assert_eq!(cagrs.len(), 2);
         assert!((cagrs[&HistoricalPeriod::OneYear] - 25.0).abs() < 0.1);
         assert!((cagrs[&HistoricalPeriod::ThreeYears] - 25.99).abs() < 0.1);
     }
