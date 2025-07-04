@@ -7,7 +7,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use futures::future::join_all;
-use rust_decimal::prelude::*;
+use rust_decimal::{Decimal, prelude::*};
 use rust_finprim::rate::cagr;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -93,6 +93,7 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
     let mut return_results: Vec<ReturnResult> = Vec::new();
 
     for (identifier, price_result) in fetched_results {
+        debug!("Calculating CAGR for {identifier}");
         match price_result {
             Ok(price_data) => match calculate_cagr(&price_data) {
                 Ok(cagrs) => return_results.push(ReturnResult {
@@ -105,14 +106,14 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
                     identifier,
                     short_name: None,
                     cagrs: BTreeMap::new(),
-                    error: Some(format!("CAGR calculation failed: {}", e)),
+                    error: Some(format!("CAGR calculation failed: {e}")),
                 }),
             },
             Err(e) => return_results.push(ReturnResult {
                 identifier,
                 short_name: None,
                 cagrs: BTreeMap::new(),
-                error: Some(format!("Price fetch failed: {}", e)),
+                error: Some(format!("Price fetch failed: {e}")),
             }),
         }
     }
@@ -176,21 +177,28 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
                 continue;
             }
 
+            debug!(
+                "historical price: {:?}, {duration_years}yrs",
+                *historical_price
+            );
             let begin_bal = Decimal::from_f64(*historical_price)
                 .ok_or_else(|| anyhow!("Invalid historical price"))?;
             let end_bal = Decimal::from_f64(price_data.price)
                 .ok_or_else(|| anyhow!("Invalid current price"))?;
-            let n_years = Decimal::from_f64(duration_years)
-                .ok_or_else(|| anyhow!("Invalid duration"))?;
+            let n_years =
+                Decimal::from_f64(duration_years).ok_or_else(|| anyhow!("Invalid duration"))?;
 
             if n_years.is_zero() {
                 continue;
             }
 
             let rate = cagr(begin_bal, end_bal, n_years);
-            let percentage = (rate * Decimal::from(100)).to_f64()
+            let percentage = (rate * Decimal::from(100))
+                .to_f64()
                 .ok_or_else(|| anyhow!("CAGR percentage conversion failed"))?;
             cagrs.insert(period, percentage);
+
+            debug!("cagr: {begin_bal}, {end_bal}, {n_years} = {rate}, {percentage}");
         }
     }
 
