@@ -1,28 +1,25 @@
 use crate::{
     cache::Cache,
     config::{AppConfig, Investment},
-    price_provider::{PriceProvider, PriceResult},
+    price_provider::{HistoricalPeriod, PriceProvider, PriceResult},
     ui,
 };
 use anyhow::{Result, anyhow};
-use chrono::{Datelike, NaiveDate, Utc};
 use comfy_table::Cell;
 use futures::future::join_all;
-use rust_finprim::Decimal;
-use rust_finprim::rate::xirr;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, info};
 
 #[derive(Clone)]
-struct XirrResult {
+struct ReturnResult {
     identifier: String,
-    xirr: Option<f64>,
+    cagr: Option<f62},
     error: Option<String>,
 }
 
 pub async fn run(config_path: Option<&str>) -> Result<()> {
-    info!("Calculating XIRR for investments...");
+    info!("Calculating returns for investments...");
 
     let config = match config_path {
         Some(path) => AppConfig::load_from_path(path)?,
@@ -58,26 +55,20 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         for investment in &portfolio.investments {
             match investment {
                 Investment::Stock(s) => {
-                    if !s.purchases.is_empty() {
-                        investments_to_fetch
-                            .insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
-                    }
+                    investments_to_fetch
+                        .insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
                 }
                 Investment::MutualFund(mf) => {
-                    if !mf.purchases.is_empty() {
-                        investments_to_fetch
-                            .insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
-                    }
+                    investments_to_fetch
+                        .insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
                 }
-                Investment::FixedDeposit(_) => {} // Not relevant for XIRR
+                Investment::FixedDeposit(_) => {} // Not relevant for returns
             }
         }
     }
 
     if investments_to_fetch.is_empty() {
-        println!(
-            "No stock or mutual fund investments with purchase history found to calculate XIRR for."
-        );
+        println!("No investments found to calculate returns for.");
         return Ok(());
     }
 
@@ -96,130 +87,82 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         join_all(futures).await.into_iter().collect();
     pb.finish_and_clear();
 
-    let mut xirr_results: Vec<XirrResult> = Vec::new();
+    let mut return_results: Vec<ReturnResult> = Vec::new();
 
-    for portfolio in &config.portfolios {
-        info!("Processing portfolio: {}", portfolio.name);
-        for investment in &portfolio.investments {
-            let (identifier, purchases) = match investment {
-                Investment::Stock(s) => {
-                    if s.purchases.is_empty() {
-                        continue;
-                    }
-                    (s.symbol.clone(), &s.purchases)
+    for (identifier, price_result) in fetched_results {
+        match price_result {
+            Ok(price_data) => {
+                match calculate_cagr(&price_data) {
+                    Ok(cagr) => return_results.push(ReturnResult {
+                        identifier,
+                        cagr: Some(cagr),
+                        error: None,
+                    }),
+                    Err(e) => return_results.push(ReturnResult {
+                        identifier,
+                        cagr: None,
+                        error: Some(format!("CAGR calculation failed: {}", e)),
+                    }),
                 }
-                Investment::MutualFund(mf) => {
-                    if mf.purchases.is_empty() {
-                        continue;
-                    }
-                    (mf.isin.clone(), &mf.purchases)
-                }
-                Investment::FixedDeposit(_) => continue, // Skip fixed deposits for XIRR
-            };
-
-            let current_price_result = fetched_results.get(&identifier).cloned();
-
-            let xirr_res = match current_price_result {
-                Some(Ok(price_result)) => {
-                    if let Some(current_price) = price_result.price {
-                        let total_units: f64 = purchases.iter().map(|p| p.units).sum();
-                        let current_value = current_price * total_units;
-                        match calculate_xirr(purchases, current_value) {
-                            Ok(rate) => XirrResult {
-                                identifier,
-                                xirr: Some(rate),
-                                error: None,
-                            },
-                            Err(e) => XirrResult {
-                                identifier,
-                                xirr: None,
-                                error: Some(format!("XIRR calculation failed: {}", e)),
-                            },
-                        }
-                    } else {
-                        XirrResult {
-                            identifier,
-                            xirr: None,
-                            error: Some("Current price not available".to_string()),
-                        }
-                    }
-                }
-                Some(Err(e)) => XirrResult {
-                    identifier,
-                    xirr: None,
-                    error: Some(format!("Failed to fetch price: {}", e)),
-                },
-                None => XirrResult {
-                    identifier,
-                    xirr: None,
-                    error: Some("Price data not found after fetch attempt".to_string()),
-                },
-            };
-            xirr_results.push(xirr_res);
+            }
+            Err(e) => return_results.push(ReturnResult {
+                identifier,
+                cagr: None,
+                error: Some(format!("Price fetch failed: {}", e)),
+            }),
         }
     }
 
-    if !xirr_results.is_empty() {
-        display_xirr_results(&xirr_results);
+    if !return_results.is_empty() {
+        display_return_results(&return_results);
     } else {
-        println!("No XIRR results to display.");
+        println!("No return results to display.");
     }
 
     Ok(())
 }
 
-fn calculate_xirr(purchases: &[Purchase], current_value: f64) -> Result<f64> {
-    let mut cash_flows = vec![];
-    let today_days = days_since_epoch(&Utc::now().date_naive());
+fn calculate_cagr(price_data: &PriceResult) -> Result<f64> {
+    // Use 3-year historical price by default
+    let period = HistoricalPeriod::ThreeYears;
+    
+    if let Some(period_price) = price_data.historical.get(&period) {
+        let current_price = price_data
+            .price
+            .ok_or_else(|| anyhow!("Current price missing"))?;
 
-    for purchase in purchases {
-        let amount = Decimal::from_f64(-purchase.amount)
-            .ok_or_else(|| anyhow!("Invalid amount"))?
-            .ok_or_else(|| anyhow!("Failed to convert purchase amount to Decimal"))?;
-        cash_flows.push((amount, days_since_epoch(&purchase.date)));
+        // Calculate time period in years
+        let duration_years = period.to_duration().num_days() as f64 / 365.0;
+        
+        // Calculate CAGR: [(current / historical)^(1/years) - 1] * 100
+        let cagr = ((current_price / period_price).powf(1.0 / duration_years) - 1.0) * 100.0;
+        Ok(cagr)
+    } else {
+        Err(anyhow!("Historic price unavailable for {} period", period))
     }
-
-    // Add current value as positive cash flow
-    let current_value_decimal = Decimal::from_f64(current_value)
-        .ok_or_else(|| anyhow!("Invalid current value"))?
-        .ok_or_else(|| anyhow!("Failed to convert current value to Decimal"))?;
-    cash_flows.push((current_value_decimal, today_days));
-
-    if cash_flows.is_empty() {
-        return Err(anyhow!("No cash flows to calculate XIRR"));
-    }
-
-    xirr(&cash_flows, None, Some(Decimal::from_f64(0.00001).unwrap()))
-        .map_err(|e| anyhow!("XIRR computation error: {:?}", e))
 }
 
-fn days_since_epoch(date: &NaiveDate) -> i32 {
-    date.num_days_from_ce()
-        - NaiveDate::from_ymd_opt(1970, 1, 1)
-            .unwrap()
-            .num_days_from_ce()
-}
-
-fn display_xirr_results(results: &[XirrResult]) {
+// Format: "CAGR" instead of "XIRR"
+fn display_return_results(results: &[ReturnResult]) {
     let mut table = ui::new_styled_table();
 
     table.set_header(vec![
         ui::header_cell("Identifier"),
-        ui::header_cell("XIRR (%)"),
+        ui::header_cell("CAGR (3Y, %)"),
     ]);
 
     for result in results {
-        let xirr_cell = if let Some(rate) = result.xirr {
-            let percentage = rate * 100.0;
-
-            // Display positive XIRR in green, negative or zero in default/error
-            ui::change_cell(percentage)
+        let cagr_cell = if let Some(rate) = result.cagr {
+            ui::change_cell(rate)
         } else if let Some(_) = &result.error {
             ui::na_cell(true)
         } else {
             ui::na_cell(false)
         };
-        table.add_row(vec![Cell::new(result.identifier.clone()), xirr_cell]);
+        table.add_row(vec![
+            Cell::new(result.identifier.clone()),
+            cagr_cell,
+        ]);
     }
 
     println!("{table}");
