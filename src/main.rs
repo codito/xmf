@@ -29,6 +29,12 @@ enum Commands {
         #[arg(short, long)]
         config_path: Option<String>,
     },
+    /// Display XIRR return calculations
+    Return {
+        /// Path to optional configuration file
+        #[arg(short, long)]
+        config_path: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -41,6 +47,7 @@ async fn main() -> Result<()> {
         Some(Commands::Setup) => setup(),
         Some(Commands::Summary { config_path }) => xmf::run(config_path.as_deref()).await,
         Some(Commands::Change { config_path }) => xmf::change::run(config_path.as_deref()).await,
+        Some(Commands::Return { config_path }) => xmf::return::run(config_path.as_deref()).await,
         None => {
             Cli::command().print_help()?;
             Ok(())
