@@ -7,7 +7,7 @@ pub mod price_provider;
 pub mod providers;
 pub mod summary;
 pub mod ui;
-pub mod return;
+pub mod returns;
 
 use crate::price_provider::PriceResult;
 use anyhow::Result;

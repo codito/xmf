@@ -11,6 +11,7 @@ use chrono::{NaiveDate, Utc, Datelike};
 use comfy_table::Cell;
 use futures::future::join_all;
 use rust_finprim::rate::xirr;
+use num_traits::cast::FromPrimitive;
 use rust_finprim::Decimal;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -175,13 +176,13 @@ fn calculate_xirr(purchases: &[Purchase], current_value: f64) -> Result<f64> {
     let today_days = days_since_epoch(&Utc::now().date_naive());
 
     for purchase in purchases {
-        let amount = Decimal::from_f64(-purchase.amount)
+        let amount = Decimal::from_f64(-purchase.amount).ok_or_else(|| anyhow!("Invalid amount"))?
             .ok_or_else(|| anyhow!("Failed to convert purchase amount to Decimal"))?;
         cash_flows.push((amount, days_since_epoch(&purchase.date)));
     }
 
     // Add current value as positive cash flow
-    let current_value_decimal = Decimal::from_f64(current_value)
+    let current_value_decimal = Decimal::from_f64(current_value).ok_or_else(|| anyhow!("Invalid current value"))?
         .ok_or_else(|| anyhow!("Failed to convert current value to Decimal"))?;
     cash_flows.push((current_value_decimal, today_days));
 
@@ -212,7 +213,7 @@ fn display_xirr_results(results: &[XirrResult]) {
                 ui::value_cell(format!("{:.2}%", percentage), ui::StyleType::Default)
             }
         } else if let Some(error_msg) = &result.error {
-            ui::error_cell(format!("Error: {}", error_msg))
+            ui::na_cell(true)
         } else {
             ui::na_cell(false)
         };
