@@ -117,9 +117,37 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         }
     }
 
-    if !return_results.is_empty() {
-        display_return_results(&return_results);
-    } else {
+    let return_results_map: HashMap<String, ReturnResult> = return_results
+        .into_iter()
+        .map(|r| (r.identifier.clone(), r))
+        .collect();
+
+    let num_portfolios = config.portfolios.len();
+    for (i, portfolio) in config.portfolios.iter().enumerate() {
+        let portfolio_results: Vec<ReturnResult> = portfolio
+            .investments
+            .iter()
+            .filter_map(|investment| match investment {
+                Investment::Stock(s) => return_results_map.get(&s.symbol).cloned(),
+                Investment::MutualFund(mf) => return_results_map.get(&mf.isin).cloned(),
+                Investment::FixedDeposit(_) => None,
+            })
+            .collect();
+
+        if !portfolio_results.is_empty() {
+            println!(
+                "\nPortfolio: {}",
+                ui::style_text(&portfolio.name, ui::StyleType::Title)
+            );
+            display_return_results(&portfolio_results);
+
+            if i < num_portfolios - 1 {
+                ui::print_separator();
+            }
+        }
+    }
+
+    if return_results_map.is_empty() {
         println!("No return results to display.");
     }
 
@@ -184,7 +212,7 @@ fn display_return_results(results: &[ReturnResult]) {
         HistoricalPeriod::TenYears,
     ];
 
-    let mut header = vec![ui::header_cell("Symbol")];
+    let mut header = vec![ui::header_cell("Investment")];
     for period in &periods {
         header.push(ui::header_cell(&period.to_string()));
     }
