@@ -123,9 +123,6 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
 fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod, f64>> {
     let mut cagrs = BTreeMap::new();
     let periods = [
-        HistoricalPeriod::OneDay,
-        HistoricalPeriod::FiveDays,
-        HistoricalPeriod::OneMonth,
         HistoricalPeriod::OneYear,
         HistoricalPeriod::ThreeYears,
         HistoricalPeriod::FiveYears,
@@ -137,14 +134,17 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
             let duration_years = period.to_duration().num_days() as f64 / 365.0;
             // Avoid division by zero if duration_years is 0, though for these periods it shouldn't be
             if duration_years > 0.0 {
-                let cagr = ((price_data.price / historical_price).powf(1.0 / duration_years) - 1.0) * 100.0;
+                let cagr = ((price_data.price / historical_price).powf(1.0 / duration_years) - 1.0)
+                    * 100.0;
                 cagrs.insert(period, cagr);
             }
         }
     }
 
     if cagrs.is_empty() {
-        Err(anyhow!("No historical prices available for CAGR calculation"))
+        Err(anyhow!(
+            "No historical prices available for CAGR calculation"
+        ))
     } else {
         Ok(cagrs)
     }
