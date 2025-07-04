@@ -53,7 +53,6 @@ fn extract_historical_prices(
             let target_date = reference_date - period.to_duration();
             if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
                 if price > 0.0 {
-                    let change = ((current_price - price) / price) * 100.0;
                     historical_prices.insert(period, price);
                 }
             }
@@ -61,7 +60,6 @@ fn extract_historical_prices(
     } else if let Some(prev_close) = chart_item.meta.previous_close {
         // Handle case where we only have meta data (no historical bars)
         if prev_close > 0.0 {
-            let change = ((current_price - prev_close) / prev_close) * 100.0;
             historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
     }
@@ -160,7 +158,7 @@ impl PriceProvider for YahooFinanceProvider {
         let currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
 
-        let historical = extract_historical_prices(item, current_price);
+        let historical_prices = extract_historical_prices(item, current_price);
 
         let result = PriceResult {
             price: current_price,
@@ -299,7 +297,7 @@ mod tests {
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
         assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
-        assert!(result.historical.is_empty());
+        assert!(result.historical_prices.is_empty());
     }
 
     #[tokio::test]
@@ -347,45 +345,41 @@ mod tests {
 
         // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
         // Also includes 1D since we set the last available data as reference
-        assert_eq!(result.historical.len(), 7);
+        assert_eq!(result.historical_prices.len(), 7);
 
-        let expected_change_5y = ((current_price - p_5y) / p_5y) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::FiveYears).unwrap() - expected_change_5y)
+            (result.historical_prices.get(&HistoricalPeriod::FiveYears).unwrap() - p_5y)
                 .abs()
                 < 0.001
         );
         assert!(
-            (result.historical.get(&HistoricalPeriod::TenYears).unwrap() - expected_change_5y)
+            (result.historical_prices.get(&HistoricalPeriod::TenYears).unwrap() - p_5y)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_1y = ((current_price - p_1y) / p_1y) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - p_1y).abs()
                 < 0.001
         );
         assert!(
             (result
-                .historical
+                .historical_prices
                 .get(&HistoricalPeriod::ThreeYears)
                 .unwrap()
-                - expected_change_1y)
+                - p_1y)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_1m = ((current_price - p_1m) / p_1m) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - p_1m)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_5d = ((current_price - p_5d) / p_5d) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
+            (result.historical_prices.get(&HistoricalPeriod::FiveDays).unwrap() - p_5d)
                 .abs()
                 < 0.001
         );

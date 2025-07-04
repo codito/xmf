@@ -219,33 +219,29 @@ mod tests {
         assert!(!result.historical_prices.contains_key(&HistoricalPeriod::FiveYears));
 
         // 3y uses the data <5y
-        let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
         assert!(
             (result
                 .historical_prices
                 .get(&HistoricalPeriod::ThreeYears)
                 .unwrap()
-                - expected_change_5y)
+                - price_5y)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - price_1y).abs()
                 < 0.001
         );
 
-        let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - price_1m)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_5d = ((current_price - price_5d) / price_5d) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::FiveDays).unwrap() - expected_change_5d)
+            (result.historical_prices.get(&HistoricalPeriod::FiveDays).unwrap() - price_5d)
                 .abs()
                 < 0.001
         );
@@ -279,27 +275,25 @@ mod tests {
         // 1D, 5D will use the closest data >1 month old.
         // 1Y and 1M will resolve to their respective prices.
         // 10Y, 5Y, 3Y will not be available since we don't have the data points.
-        assert_eq!(result.historical.len(), 4, "{:?}", result.historical);
+        assert_eq!(result.historical_prices.len(), 4, "{:?}", result.historical_prices);
 
-        let expected_change_1m = ((current_price - price_1m) / price_1m) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneMonth).unwrap() - expected_change_1m)
+            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - price_1m)
                 .abs()
                 < 0.001
         );
 
-        let expected_change_1y = ((current_price - price_1y) / price_1y) * 100.0;
         assert!(
-            (result.historical.get(&HistoricalPeriod::OneYear).unwrap() - expected_change_1y).abs()
+            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - price_1y).abs()
                 < 0.001
         );
         assert!(
             !result
-                .historical
+                .historical_prices
                 .contains_key(&HistoricalPeriod::ThreeYears)
         );
-        assert!(!result.historical.contains_key(&HistoricalPeriod::FiveYears));
-        assert!(!result.historical.contains_key(&HistoricalPeriod::TenYears));
+        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::FiveYears));
+        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::TenYears));
     }
 
     #[tokio::test]

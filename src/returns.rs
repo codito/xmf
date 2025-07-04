@@ -257,7 +257,7 @@ mod tests {
         PriceResult {
             price: 100.0,
             currency: "USD".to_string(),
-            historical: HashMap::from([
+            historical_prices: HashMap::from([
                 (HistoricalPeriod::OneYear, 80.0),
                 (HistoricalPeriod::ThreeYears, 50.0),
             ]),
@@ -280,7 +280,7 @@ mod tests {
         let data = PriceResult {
             price: 100.0,
             currency: "USD".to_string(),
-            historical: HashMap::new(),
+            historical_prices: HashMap::new(),
             short_name: None,
         };
 
