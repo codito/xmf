@@ -14,7 +14,7 @@ use tracing::{debug, info};
 #[derive(Clone)]
 struct ReturnResult {
     identifier: String,
-    cagr: Option<f62},
+    cagr: Option<f64>,
     error: Option<String>,
 }
 
