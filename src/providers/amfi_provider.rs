@@ -215,8 +215,16 @@ mod tests {
         // 5y is also ignored because we don't have a data point >= 5y
         assert_eq!(result.historical_prices.len(), 5);
 
-        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::TenYears));
-        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::FiveYears));
+        assert!(
+            !result
+                .historical_prices
+                .contains_key(&HistoricalPeriod::TenYears)
+        );
+        assert!(
+            !result
+                .historical_prices
+                .contains_key(&HistoricalPeriod::FiveYears)
+        );
 
         // 3y uses the data <5y
         assert!(
@@ -230,18 +238,31 @@ mod tests {
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - price_1y).abs()
-                < 0.001
-        );
-
-        assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - price_1m)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneYear)
+                .unwrap()
+                - price_1y)
                 .abs()
                 < 0.001
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::FiveDays).unwrap() - price_5d)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneMonth)
+                .unwrap()
+                - price_1m)
+                .abs()
+                < 0.001
+        );
+
+        assert!(
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::FiveDays)
+                .unwrap()
+                - price_5d)
                 .abs()
                 < 0.001
         );
@@ -275,16 +296,30 @@ mod tests {
         // 1D, 5D will use the closest data >1 month old.
         // 1Y and 1M will resolve to their respective prices.
         // 10Y, 5Y, 3Y will not be available since we don't have the data points.
-        assert_eq!(result.historical_prices.len(), 4, "{:?}", result.historical_prices);
+        assert_eq!(
+            result.historical_prices.len(),
+            4,
+            "{:?}",
+            result.historical_prices
+        );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - price_1m)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneMonth)
+                .unwrap()
+                - price_1m)
                 .abs()
                 < 0.001
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - price_1y).abs()
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneYear)
+                .unwrap()
+                - price_1y)
+                .abs()
                 < 0.001
         );
         assert!(
@@ -292,8 +327,16 @@ mod tests {
                 .historical_prices
                 .contains_key(&HistoricalPeriod::ThreeYears)
         );
-        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::FiveYears));
-        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::TenYears));
+        assert!(
+            !result
+                .historical_prices
+                .contains_key(&HistoricalPeriod::FiveYears)
+        );
+        assert!(
+            !result
+                .historical_prices
+                .contains_key(&HistoricalPeriod::TenYears)
+        );
     }
 
     #[tokio::test]

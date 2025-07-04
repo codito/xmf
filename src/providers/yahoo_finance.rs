@@ -17,10 +17,7 @@ fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]
         .and_then(|index| prices.get(index).and_then(|p| *p))
 }
 
-fn extract_historical_prices(
-    chart_item: &PriceChartItem,
-    current_price: f64,
-) -> HashMap<HistoricalPeriod, f64> {
+fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalPeriod, f64> {
     let mut historical_prices = HashMap::new();
 
     if let (Some(timestamps), Some(closes)) = (
@@ -158,7 +155,7 @@ impl PriceProvider for YahooFinanceProvider {
         let currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
 
-        let historical_prices = extract_historical_prices(item, current_price);
+        let historical_prices = extract_historical_prices(item);
 
         let result = PriceResult {
             price: current_price,
@@ -348,18 +345,31 @@ mod tests {
         assert_eq!(result.historical_prices.len(), 7);
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::FiveYears).unwrap() - p_5y)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::FiveYears)
+                .unwrap()
+                - p_5y)
                 .abs()
                 < 0.001
         );
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::TenYears).unwrap() - p_5y)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::TenYears)
+                .unwrap()
+                - p_5y)
                 .abs()
                 < 0.001
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneYear).unwrap() - p_1y).abs()
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneYear)
+                .unwrap()
+                - p_1y)
+                .abs()
                 < 0.001
         );
         assert!(
@@ -373,13 +383,21 @@ mod tests {
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::OneMonth).unwrap() - p_1m)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::OneMonth)
+                .unwrap()
+                - p_1m)
                 .abs()
                 < 0.001
         );
 
         assert!(
-            (result.historical_prices.get(&HistoricalPeriod::FiveDays).unwrap() - p_5d)
+            (result
+                .historical_prices
+                .get(&HistoricalPeriod::FiveDays)
+                .unwrap()
+                - p_5d)
                 .abs()
                 < 0.001
         );

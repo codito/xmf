@@ -5,9 +5,9 @@ pub mod currency_provider;
 pub mod log;
 pub mod price_provider;
 pub mod providers;
+pub mod returns;
 pub mod summary;
 pub mod ui;
-pub mod returns;
 
 use crate::price_provider::PriceResult;
 use anyhow::Result;
