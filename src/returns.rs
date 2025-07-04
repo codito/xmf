@@ -198,12 +198,10 @@ mod tests {
             price: 100.0,
             currency: "USD".to_string(),
             historical: HashMap::from([
-                (HistoricalPeriod::OneDay, 99.0),
-                (HistoricalPeriod::OneMonth, 95.0),
                 (HistoricalPeriod::OneYear, 80.0),
                 (HistoricalPeriod::ThreeYears, 50.0),
             ]),
-            short_name: None,
+            short_name: Some("TEST".to_string()),
         }
     }
 
