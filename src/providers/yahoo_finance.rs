@@ -36,7 +36,7 @@ fn extract_historical_prices(
             .and_then(|ts| Utc.timestamp_opt(*ts, 0).single())
         {
             Some(dt) => dt,
-            None => return historical_changes,
+            None => return historical_prices,
         };
 
         for period in [

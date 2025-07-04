@@ -213,10 +213,10 @@ mod tests {
         // 1d is added based on last price
         // 10y is not available as last data is < 5y
         // 5y is also ignored because we don't have a data point >= 5y
-        assert_eq!(result.historical.len(), 5);
+        assert_eq!(result.historical_prices.len(), 5);
 
-        assert!(!result.historical.contains_key(&HistoricalPeriod::TenYears));
-        assert!(!result.historical.contains_key(&HistoricalPeriod::FiveYears));
+        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::TenYears));
+        assert!(!result.historical_prices.contains_key(&HistoricalPeriod::FiveYears));
 
         // 3y uses the data <5y
         let expected_change_5y = ((current_price - price_5y) / price_5y) * 100.0;
