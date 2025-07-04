@@ -74,7 +74,7 @@ impl PriceProvider for AmfiProvider {
         let currency = "INR".to_string();
         let short_name = amfi_response.name;
 
-        let mut historical = HashMap::new();
+        let mut historical_prices = HashMap::new();
 
         if !amfi_response.historical_nav.is_empty() {
             let prices: Vec<_> = amfi_response
@@ -115,7 +115,7 @@ impl PriceProvider for AmfiProvider {
                     {
                         if *price > 0.0 {
                             let change = ((current_price - price) / price) * 100.0;
-                            historical.insert(period, change);
+                            historical_prices.insert(period, *price);
                         }
                     }
                 }
@@ -125,7 +125,7 @@ impl PriceProvider for AmfiProvider {
         let result = PriceResult {
             price: current_price,
             currency,
-            historical,
+            historical_prices,
             short_name,
         };
 

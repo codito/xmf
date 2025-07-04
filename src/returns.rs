@@ -165,7 +165,7 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
     ];
 
     for &period in &periods {
-        if let Some(historical_price) = price_data.historical.get(&period) {
+        if let Some(historical_price) = price_data.historical_prices.get(&period) {
             if *historical_price <= 0.0 || price_data.price <= 0.0 {
                 continue;
             }

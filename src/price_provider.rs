@@ -51,7 +51,7 @@ impl HistoricalPeriod {
 pub struct PriceResult {
     pub price: f64,
     pub currency: String,
-    pub historical: HashMap<HistoricalPeriod, f64>,
+    pub historical_prices: HashMap<HistoricalPeriod, f64>,
     pub short_name: Option<String>,
 }
 

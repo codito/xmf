@@ -21,7 +21,7 @@ fn extract_historical_prices(
     chart_item: &PriceChartItem,
     current_price: f64,
 ) -> HashMap<HistoricalPeriod, f64> {
-    let mut historical_changes = HashMap::new();
+    let mut historical_prices = HashMap::new();
 
     if let (Some(timestamps), Some(closes)) = (
         chart_item.timestamp.as_ref(),
@@ -54,7 +54,7 @@ fn extract_historical_prices(
             if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
                 if price > 0.0 {
                     let change = ((current_price - price) / price) * 100.0;
-                    historical_changes.insert(period, change);
+                    historical_prices.insert(period, price);
                 }
             }
         }
@@ -62,11 +62,11 @@ fn extract_historical_prices(
         // Handle case where we only have meta data (no historical bars)
         if prev_close > 0.0 {
             let change = ((current_price - prev_close) / prev_close) * 100.0;
-            historical_changes.insert(HistoricalPeriod::OneDay, change);
+            historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
     }
 
-    historical_changes
+    historical_prices
 }
 
 // YahooFinanceProvider implementation for PriceProvider
@@ -165,7 +165,7 @@ impl PriceProvider for YahooFinanceProvider {
         let result = PriceResult {
             price: current_price,
             currency,
-            historical,
+            historical_prices,
             short_name,
         };
 
