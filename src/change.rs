@@ -1,5 +1,4 @@
-use crate::cache::Cache;
-use crate::config::{AppConfig, Investment};
+use crate::config::Investment;
 use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
 use crate::ui;
 use anyhow::Result;
@@ -7,7 +6,6 @@ use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 #[derive(Clone)]
 struct ChangeResult {
@@ -30,11 +28,11 @@ pub async fn run(
             match investment {
                 Investment::Stock(s) => {
                     investments_to_fetch
-                        .insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
+                        .insert(s.symbol.clone(), symbol_provider);
                 }
                 Investment::MutualFund(mf) => {
                     investments_to_fetch
-                        .insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
+                        .insert(mf.isin.clone(), isin_provider);
                 }
                 Investment::FixedDeposit(_) => {}
             }

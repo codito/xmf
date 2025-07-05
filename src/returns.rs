@@ -1,6 +1,5 @@
 use crate::{
-    cache::Cache,
-    config::{AppConfig, Investment},
+    config::Investment,
     price_provider::{HistoricalPeriod, PriceProvider, PriceResult},
     ui,
 };
@@ -10,7 +9,6 @@ use futures::future::join_all;
 use rust_decimal::{Decimal, prelude::*};
 use rust_finprim::rate::cagr;
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use tracing::{debug, info};
 
 #[derive(Clone)]
@@ -36,11 +34,11 @@ pub async fn run(
             match investment {
                 Investment::Stock(s) => {
                     investments_to_fetch
-                        .insert(s.symbol.clone(), &stock_provider as &dyn PriceProvider);
+                        .insert(s.symbol.clone(), symbol_provider);
                 }
                 Investment::MutualFund(mf) => {
                     investments_to_fetch
-                        .insert(mf.isin.clone(), &mf_provider as &dyn PriceProvider);
+                        .insert(mf.isin.clone(), isin_provider);
                 }
                 Investment::FixedDeposit(_) => {} // Not relevant for returns
             }

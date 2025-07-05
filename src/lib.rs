@@ -21,13 +21,6 @@ pub enum AppCommand {
     Returns,
 }
 
-/// Commands that require full provider setup
-pub enum AppCommand {
-    Summary,
-    Change,
-    Returns,
-}
-
 /// Common command execution entry point
 pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Result<()> {
     info!("Funds Tracker starting...");
@@ -50,9 +43,9 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
         AppCommand::Summary => {
             summary::run(
                 &config.portfolios,
-                &symbol_provider,
-                &isin_provider,
-                &currency_provider,
+                &*symbol_provider,
+                &*isin_provider,
+                &*currency_provider,
                 &config.currency,
             )
             .await
@@ -60,18 +53,18 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
         AppCommand::Change => {
             change::run(
                 &config.portfolios,
-                &symbol_provider,
-                &isin_provider,
-                &currency_provider,
+                &*symbol_provider,
+                &*isin_provider,
+                &*currency_provider,
             )
             .await
         }
         AppCommand::Returns => {
             returns::run(
                 &config.portfolios,
-                &symbol_provider,
-                &isin_provider,
-                &currency_provider,
+                &*symbol_provider,
+                &*isin_provider,
+                &*currency_provider,
             )
             .await
         }
