@@ -31,7 +31,7 @@ pub enum AppCommand {
 /// Common command execution entry point
 pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Result<()> {
     info!("Funds Tracker starting...");
-    
+
     let config = match config_path {
         Some(path) => config::AppConfig::load_from_path(path)?,
         None => config::AppConfig::load()?,
@@ -43,7 +43,8 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
     let rate_cache = Arc::new(cache::Cache::<String, f64>::new());
 
     // Initialize providers
-    let (symbol_provider, isin_provider, currency_provider) = setup_providers(&config, &price_cache, &rate_cache);
+    let (symbol_provider, isin_provider, currency_provider) =
+        setup_providers(&config, &price_cache, &rate_cache);
 
     match command {
         AppCommand::Summary => {
@@ -57,10 +58,22 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
             .await
         }
         AppCommand::Change => {
-            change::run(&config.portfolios, &symbol_provider, &isin_provider, &currency_provider).await
+            change::run(
+                &config.portfolios,
+                &symbol_provider,
+                &isin_provider,
+                &currency_provider,
+            )
+            .await
         }
         AppCommand::Returns => {
-            returns::run(&config.portfolios, &symbol_provider, &isin_provider, &currency_provider).await
+            returns::run(
+                &config.portfolios,
+                &symbol_provider,
+                &isin_provider,
+                &currency_provider,
+            )
+            .await
         }
     }
 }
@@ -79,7 +92,7 @@ fn setup_providers(
         .yahoo
         .as_ref()
         .map_or("https://query1.finance.yahoo.com", |p| &p.base_url);
-        
+
     let amfi_base = config
         .providers
         .amfi
@@ -100,3 +113,4 @@ fn setup_providers(
             Arc::clone(rate_cache),
         )),
     )
+}
