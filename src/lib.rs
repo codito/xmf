@@ -14,6 +14,13 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
 
+/// Commands that require full provider setup
+pub enum AppCommand {
+    Summary,
+    Change,
+    Returns,
+}
+
 /// Common command execution entry point
 pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Result<()> {
     info!("Funds Tracker starting...");
