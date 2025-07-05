@@ -99,7 +99,7 @@ impl PortfolioSummary {
     }
 }
 
-pub async fn generate_and_display_summaries(
+pub async fn run(
     portfolios: &[Portfolio],
     symbol_provider: &(dyn PriceProvider + Send + Sync),
     isin_provider: &(dyn PriceProvider + Send + Sync),

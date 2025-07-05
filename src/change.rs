@@ -17,37 +17,15 @@ struct ChangeResult {
     error: Option<String>,
 }
 
-pub async fn run(config_path: Option<&str>) -> Result<()> {
-    let config = match config_path {
-        Some(path) => AppConfig::load_from_path(path)?,
-        None => AppConfig::load()?,
-    };
-
-    let price_cache = Arc::new(Cache::<String, PriceResult>::new());
-
-    let base_url = config
-        .providers
-        .yahoo
-        .as_ref()
-        .map(|c| c.base_url.as_str())
-        .unwrap_or("https://query1.finance.yahoo.com");
-
-    let amfi_base_url = config
-        .providers
-        .amfi
-        .as_ref()
-        .map(|c| c.base_url.as_str())
-        .unwrap_or("https://mf.captnemo.in");
-
-    let stock_provider = crate::providers::yahoo_finance::YahooFinanceProvider::new(
-        base_url,
-        Arc::clone(&price_cache),
-    );
-    let mf_provider =
-        crate::providers::amfi_provider::AmfiProvider::new(amfi_base_url, Arc::clone(&price_cache));
+pub async fn run(
+    portfolios: &[crate::config::Portfolio],
+    symbol_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
+    isin_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
+    _currency_provider: &(dyn crate::currency_provider::CurrencyRateProvider + Send + Sync),
+) -> anyhow::Result<()> {
 
     let mut investments_to_fetch = HashMap::new();
-    for portfolio in &config.portfolios {
+    for portfolio in portfolios {
         for investment in &portfolio.investments {
             match investment {
                 Investment::Stock(s) => {
@@ -111,8 +89,8 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
         .map(|r| (r.identifier.clone(), r))
         .collect();
 
-    let num_portfolios = config.portfolios.len();
-    for (i, portfolio) in config.portfolios.iter().enumerate() {
+    let num_portfolios = portfolios.len();
+    for (i, portfolio) in portfolios.iter().enumerate() {
         let portfolio_results: Vec<ChangeResult> = portfolio
             .investments
             .iter()
