@@ -76,8 +76,13 @@ pub async fn run(config_path: Option<&str>) -> Result<()> {
             let result = match provider.fetch_price(&id).await {
                 Ok(price_result) => {
                     let mut changes = BTreeMap::new();
-                    for (period, change) in price_result.historical {
-                        changes.insert(period, change);
+                    for (period, historical_price) in &price_result.historical_prices {
+                        if *historical_price > 0.0 {
+                            let change = ((price_result.price - historical_price)
+                                / historical_price)
+                                * 100.0;
+                            changes.insert(*period, change);
+                        }
                     }
                     ChangeResult {
                         identifier: id,

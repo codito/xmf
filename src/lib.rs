@@ -5,6 +5,7 @@ pub mod currency_provider;
 pub mod log;
 pub mod price_provider;
 pub mod providers;
+pub mod returns;
 pub mod summary;
 pub mod ui;
 

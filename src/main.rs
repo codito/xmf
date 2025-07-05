@@ -9,6 +9,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Path to optional configuration file
+    #[arg(short, long, global = true)]
+    config_path: Option<String>,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -18,17 +22,11 @@ enum Commands {
     /// Create default configuration
     Setup,
     /// Display portfolio summary
-    Summary {
-        /// Path to optional configuration file
-        #[arg(short, long)]
-        config_path: Option<String>,
-    },
+    Summary,
     /// Display price change summary
-    Change {
-        /// Path to optional configuration file
-        #[arg(short, long)]
-        config_path: Option<String>,
-    },
+    Change,
+    /// Display XIRR return calculations
+    Returns,
 }
 
 #[tokio::main]
@@ -39,8 +37,9 @@ async fn main() -> Result<()> {
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        Some(Commands::Summary { config_path }) => xmf::run(config_path.as_deref()).await,
-        Some(Commands::Change { config_path }) => xmf::change::run(config_path.as_deref()).await,
+        Some(Commands::Summary) => xmf::run(cli.config_path.as_deref()).await,
+        Some(Commands::Change) => xmf::change::run(cli.config_path.as_deref()).await,
+        Some(Commands::Returns) => xmf::returns::run(cli.config_path.as_deref()).await,
         None => {
             Cli::command().print_help()?;
             Ok(())

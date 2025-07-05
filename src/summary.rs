@@ -423,7 +423,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );
@@ -470,7 +470,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );
@@ -523,7 +523,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );
@@ -532,7 +532,7 @@ mod tests {
             PriceResult {
                 price: 100.0,
                 currency: "CAD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Royal Bank of Canada".to_string()),
             },
         );
@@ -598,7 +598,7 @@ mod tests {
             PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple".to_string()),
             },
         );
@@ -607,7 +607,7 @@ mod tests {
             PriceResult {
                 price: 100.0,
                 currency: "CAD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Royal Bank".to_string()),
             },
         );
@@ -796,7 +796,7 @@ mod tests {
             PriceResult {
                 price: 200.0,
                 currency: "USD".to_string(),
-                historical: HashMap::new(),
+                historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
             },
         );

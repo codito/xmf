@@ -197,7 +197,7 @@ async fn test_real_yahoo_finance_api() {
                 "Currency should not be empty"
             );
             assert!(
-                !price_result.historical.is_empty(),
+                !price_result.historical_prices.is_empty(),
                 "Historical data should not be empty"
             );
 
@@ -237,7 +237,7 @@ async fn test_real_amfi_api() {
                 "Currency should be Indian Rupee"
             );
             assert!(
-                !price_result.historical.is_empty(),
+                !price_result.historical_prices.is_empty(),
                 "Price history should be non-empty"
             );
 
