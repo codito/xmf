@@ -148,10 +148,11 @@ pub async fn run(
 
     let summary_futures = portfolios.iter().map(|portfolio| {
         let pb_clone = pb.clone();
+        let price_results = &price_results;
         async move {
             generate_portfolio_summary(
                 portfolio,
-                &price_results,
+                price_results,
                 currency_provider,
                 target_currency,
                 &|| pb_clone.inc(1),
