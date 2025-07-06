@@ -17,8 +17,20 @@ struct Cli {
     command: Option<Commands>,
 }
 
+impl From<Commands> for xmf::AppCommand {
+    fn from(cmd: Commands) -> xmf::AppCommand {
+        match cmd {
+            Commands::Summary => xmf::AppCommand::Summary,
+            Commands::Change => xmf::AppCommand::Change,
+            Commands::Returns => xmf::AppCommand::Returns,
+            Commands::Setup => unreachable!("Setup command should be handled separately"),
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
+    /// Create default configuration
     /// Create default configuration
     Setup,
     /// Display portfolio summary
@@ -37,9 +49,7 @@ async fn main() -> Result<()> {
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        Some(Commands::Summary) => xmf::run(cli.config_path.as_deref()).await,
-        Some(Commands::Change) => xmf::change::run(cli.config_path.as_deref()).await,
-        Some(Commands::Returns) => xmf::returns::run(cli.config_path.as_deref()).await,
+        Some(cmd) => xmf::run_command(cmd.into(), cli.config_path.as_deref()).await,
         None => {
             Cli::command().print_help()?;
             Ok(())
