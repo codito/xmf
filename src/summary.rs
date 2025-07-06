@@ -1,11 +1,12 @@
-use crate::config::Portfolio;
+use crate::config::{Investment, Portfolio};
 use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::PriceProvider;
+use crate::price_provider::{PriceProvider, PriceResult};
 use crate::ui;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
+use std::collections::HashMap;
 use tracing::debug;
 
 #[derive(Debug, Clone)]
@@ -106,6 +107,37 @@ pub async fn run(
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     target_currency: &str,
 ) -> Result<()> {
+    let mut investments_to_fetch = HashMap::new();
+    for portfolio in portfolios {
+        for investment in &portfolio.investments {
+            match investment {
+                Investment::Stock(s) => {
+                    investments_to_fetch.insert(s.symbol.clone(), symbol_provider);
+                }
+                Investment::MutualFund(mf) => {
+                    investments_to_fetch.insert(mf.isin.clone(), isin_provider);
+                }
+                Investment::FixedDeposit(_) => {}
+            }
+        }
+    }
+
+    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, true);
+    pb.set_message("Fetching prices...");
+
+    let price_futures = investments_to_fetch.iter().map(|(id, provider)| {
+        let pb_clone = pb.clone();
+        async move {
+            let res = provider.fetch_price(id).await;
+            pb_clone.inc(1);
+            (id.clone(), res)
+        }
+    });
+
+    let price_results: HashMap<String, Result<PriceResult>> =
+        join_all(price_futures).await.into_iter().collect();
+    pb.finish_and_clear();
+
     // Step 1: Generate summaries for each portfolio concurrently
     let total_investments: u64 = portfolios
         .iter()
@@ -119,8 +151,7 @@ pub async fn run(
         async move {
             generate_portfolio_summary(
                 portfolio,
-                symbol_provider,
-                isin_provider,
+                &price_results,
                 currency_provider,
                 target_currency,
                 &|| pb_clone.inc(1),
@@ -205,8 +236,7 @@ async fn convert_currency(
 
 pub async fn generate_portfolio_summary(
     portfolio: &Portfolio,
-    symbol_provider: &(dyn PriceProvider + Send + Sync),
-    isin_provider: &(dyn PriceProvider + Send + Sync),
+    price_results: &HashMap<String, Result<PriceResult>>,
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     portfolio_currency: &str,
     update_callback: &(dyn Fn()),
@@ -223,25 +253,21 @@ pub async fn generate_portfolio_summary(
     let mut all_valid = true;
 
     for investment in &portfolio.investments {
-        let (identifier, units, provider, currency, value) = match investment {
+        let (identifier, units, needs_fetch, currency, value) = match investment {
             crate::config::Investment::FixedDeposit(fd) => (
                 fd.name.clone(),
                 None,
-                None,
+                false,
                 fd.currency.clone().or(Some(portfolio_currency.to_string())),
                 Some(fd.value),
             ),
-            crate::config::Investment::Stock(s) => (
-                s.symbol.clone(),
-                Some(s.units),
-                Some(symbol_provider as &(dyn PriceProvider + Send + Sync)),
-                None,
-                None,
-            ),
+            crate::config::Investment::Stock(s) => {
+                (s.symbol.clone(), Some(s.units), true, None, None)
+            }
             crate::config::Investment::MutualFund(mf) => (
                 mf.isin.clone(),
                 Some(mf.units),
-                Some(isin_provider as &(dyn PriceProvider + Send + Sync)),
+                true,
                 None,
                 None,
             ),
@@ -259,22 +285,31 @@ pub async fn generate_portfolio_summary(
             short_name: None,
         };
 
-        if let Some(p) = provider {
-            match p.fetch_price(&identifier).await {
-                Ok(price_data) => {
+        if needs_fetch {
+            match price_results.get(&identifier) {
+                Some(Ok(price_data)) => {
                     let value = units.unwrap() * price_data.price;
                     investment_summary.current_price = Some(price_data.price);
                     investment_summary.current_value = Some(value);
                     investment_summary.currency = Some(price_data.currency.clone());
                     investment_summary.short_name = price_data.short_name.clone();
                 }
-                Err(e) => {
+                Some(Err(e)) => {
                     all_valid = false;
                     investment_summary.error = Some(e.to_string());
                     debug!("Price fetch error for {}: {}", identifier, e);
                 }
+                None => {
+                    all_valid = false;
+                    investment_summary.error =
+                        Some(format!("Price data not available for {}", identifier));
+                    debug!(
+                        "Price data not found for {} in pre-fetched results map",
+                        identifier
+                    );
+                }
             }
-        };
+        }
 
         // No need for currency conversion if there's an error
         if investment_summary.error.is_none() {
@@ -417,17 +452,16 @@ mod tests {
     #[tokio::test]
     async fn test_valid_single_investment() {
         let currency_provider = MockCurrencyProvider::new();
-        let mut symbol_provider = MockPriceProvider::new();
-        symbol_provider.add_price(
-            "AAPL",
-            PriceResult {
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
-            },
+            }),
         );
-        let isin_provider = MockPriceProvider::new();
 
         let portfolio = Portfolio {
             name: "Tech".to_string(),
@@ -438,8 +472,7 @@ mod tests {
         };
         let summary = generate_portfolio_summary(
             &portfolio,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "USD",
             &|| (),
@@ -464,18 +497,17 @@ mod tests {
     #[tokio::test]
     async fn test_error_handling_price_fetch() {
         let currency_provider = MockCurrencyProvider::new();
-        let mut symbol_provider = MockPriceProvider::new();
-        symbol_provider.add_price(
-            "AAPL",
-            PriceResult {
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
-            },
+            }),
         );
-        symbol_provider.add_error("MSFT", "API unavailable");
-        let isin_provider = MockPriceProvider::new();
+        price_results.insert("MSFT".to_string(), Err(anyhow!("API unavailable")));
 
         let portfolio = Portfolio {
             name: "Tech".to_string(),
@@ -493,8 +525,7 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "USD",
             &|| (),
@@ -517,26 +548,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_mixed_currencies_with_conversion() {
-        let mut symbol_provider = MockPriceProvider::new();
-        symbol_provider.add_price(
-            "AAPL",
-            PriceResult {
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
-            },
+            }),
         );
-        symbol_provider.add_price(
-            "RY",
-            PriceResult {
+        price_results.insert(
+            "RY".to_string(),
+            Ok(PriceResult {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Royal Bank of Canada".to_string()),
-            },
+            }),
         );
-        let isin_provider = MockPriceProvider::new();
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_rate("CAD", "USD", 0.75);
         let portfolio = Portfolio {
@@ -555,8 +585,7 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "USD",
             &|| (),
@@ -592,26 +621,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_currency_conversion_error() {
-        let mut symbol_provider = MockPriceProvider::new();
-        symbol_provider.add_price(
-            "AAPL",
-            PriceResult {
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Apple".to_string()),
-            },
+            }),
         );
-        symbol_provider.add_price(
-            "RY",
-            PriceResult {
+        price_results.insert(
+            "RY".to_string(),
+            Ok(PriceResult {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Royal Bank".to_string()),
-            },
+            }),
         );
-        let isin_provider = MockPriceProvider::new();
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_error("CAD", "USD", "Rate service unavailable");
         let portfolio = Portfolio {
@@ -630,8 +658,7 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "USD",
             &|| (),
@@ -657,8 +684,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fixed_deposit_investment() {
-        let symbol_provider = MockPriceProvider::new();
-        let isin_provider = MockPriceProvider::new();
+        let price_results: HashMap<String, Result<PriceResult>> = HashMap::new();
         let currency_provider = MockCurrencyProvider::new();
 
         // Test with fixed deposit that specifies a currency
@@ -684,8 +710,7 @@ mod tests {
         // Test portfolio with specified currency
         let summary_with_currency = generate_portfolio_summary(
             &portfolio_with_currency,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "INR",
             &|| (),
@@ -710,8 +735,7 @@ mod tests {
         // Test portfolio without specified currency
         let summary_without_currency = generate_portfolio_summary(
             &portfolio_without_currency,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "INR",
             &|| (),
@@ -750,8 +774,7 @@ mod tests {
 
         let summary_usd = generate_portfolio_summary(
             &portfolio_usd_fd,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider_with_rate,
             "INR",
             &|| (),
@@ -773,8 +796,7 @@ mod tests {
         currency_provider_with_error.add_error("USD", "INR", "Rate unavailable");
         let summary_error = generate_portfolio_summary(
             &portfolio_usd_fd,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider_with_error,
             "INR",
             &|| (),
@@ -790,17 +812,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_mixed_investments_with_fixed_deposit() {
-        let mut symbol_provider = MockPriceProvider::new();
-        symbol_provider.add_price(
-            "AAPL",
-            PriceResult {
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
                 price: 200.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: Some("Apple Inc.".to_string()),
-            },
+            }),
         );
-        let isin_provider = MockPriceProvider::new();
         let mut currency_provider = MockCurrencyProvider::new();
         currency_provider.add_rate("USD", "INR", 80.0);
 
@@ -821,8 +842,7 @@ mod tests {
 
         let summary = generate_portfolio_summary(
             &portfolio,
-            &symbol_provider,
-            &isin_provider,
+            &price_results,
             &currency_provider,
             "INR",
             &|| (),
