@@ -2,7 +2,7 @@ use crate::config::{Investment, Portfolio};
 use crate::currency_provider::CurrencyRateProvider;
 use crate::price_provider::{PriceProvider, PriceResult};
 use crate::ui;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
@@ -265,13 +265,9 @@ pub async fn generate_portfolio_summary(
             crate::config::Investment::Stock(s) => {
                 (s.symbol.clone(), Some(s.units), true, None, None)
             }
-            crate::config::Investment::MutualFund(mf) => (
-                mf.isin.clone(),
-                Some(mf.units),
-                true,
-                None,
-                None,
-            ),
+            crate::config::Investment::MutualFund(mf) => {
+                (mf.isin.clone(), Some(mf.units), true, None, None)
+            }
         };
 
         let mut investment_summary = InvestmentSummary {
@@ -303,7 +299,7 @@ pub async fn generate_portfolio_summary(
                 None => {
                     all_valid = false;
                     investment_summary.error =
-                        Some(format!("Price data not available for {}", identifier));
+                        Some(format!("Price data not available for {identifier}"));
                     debug!(
                         "Price data not found for {} in pre-fetched results map",
                         identifier
@@ -370,46 +366,10 @@ mod tests {
     use super::*;
     use crate::config::{FixedDepositInvestment, Investment, StockInvestment};
     use crate::currency_provider::CurrencyRateProvider;
-    use crate::price_provider::{PriceProvider, PriceResult};
+    use crate::price_provider::PriceResult;
     use anyhow::{Result, anyhow};
     use async_trait::async_trait;
     use std::collections::HashMap;
-
-    struct MockPriceProvider {
-        prices: HashMap<String, PriceResult>,
-        errors: HashMap<String, String>,
-    }
-
-    impl MockPriceProvider {
-        fn new() -> Self {
-            MockPriceProvider {
-                prices: HashMap::new(),
-                errors: HashMap::new(),
-            }
-        }
-
-        fn add_price(&mut self, symbol: &str, price: PriceResult) {
-            self.prices.insert(symbol.to_string(), price);
-        }
-
-        fn add_error(&mut self, symbol: &str, error_msg: &str) {
-            self.errors
-                .insert(symbol.to_string(), error_msg.to_string());
-        }
-    }
-
-    #[async_trait]
-    impl PriceProvider for MockPriceProvider {
-        async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
-            if let Some(error_msg) = self.errors.get(symbol) {
-                return Err(anyhow!(error_msg.clone()));
-            }
-            self.prices
-                .get(symbol)
-                .cloned()
-                .ok_or_else(|| anyhow!("Price not found for {}", symbol))
-        }
-    }
 
     // MockCurrencyProvider for CurrencyRateProvider
     struct MockCurrencyProvider {
