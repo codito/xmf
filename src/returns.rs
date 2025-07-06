@@ -1,6 +1,6 @@
 use crate::{
     config::Investment,
-    price_provider::{HistoricalPeriod, PriceProvider, PriceResult},
+    price_provider::{HistoricalPeriod, PriceResult},
     ui,
 };
 use anyhow::{Result, anyhow};
@@ -27,18 +27,15 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     info!("Calculating returns for investments...");
 
-
     let mut investments_to_fetch = HashMap::new();
     for portfolio in portfolios {
         for investment in &portfolio.investments {
             match investment {
                 Investment::Stock(s) => {
-                    investments_to_fetch
-                        .insert(s.symbol.clone(), symbol_provider);
+                    investments_to_fetch.insert(s.symbol.clone(), symbol_provider);
                 }
                 Investment::MutualFund(mf) => {
-                    investments_to_fetch
-                        .insert(mf.isin.clone(), isin_provider);
+                    investments_to_fetch.insert(mf.isin.clone(), isin_provider);
                 }
                 Investment::FixedDeposit(_) => {} // Not relevant for returns
             }

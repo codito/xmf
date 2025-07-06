@@ -1,7 +1,6 @@
 use crate::config::Investment;
-use crate::price_provider::{HistoricalPeriod, PriceProvider, PriceResult};
+use crate::price_provider::HistoricalPeriod;
 use crate::ui;
-use anyhow::Result;
 use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::BTreeMap;
@@ -21,18 +20,15 @@ pub async fn run(
     isin_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
     _currency_provider: &(dyn crate::currency_provider::CurrencyRateProvider + Send + Sync),
 ) -> anyhow::Result<()> {
-
     let mut investments_to_fetch = HashMap::new();
     for portfolio in portfolios {
         for investment in &portfolio.investments {
             match investment {
                 Investment::Stock(s) => {
-                    investments_to_fetch
-                        .insert(s.symbol.clone(), symbol_provider);
+                    investments_to_fetch.insert(s.symbol.clone(), symbol_provider);
                 }
                 Investment::MutualFund(mf) => {
-                    investments_to_fetch
-                        .insert(mf.isin.clone(), isin_provider);
+                    investments_to_fetch.insert(mf.isin.clone(), isin_provider);
                 }
                 Investment::FixedDeposit(_) => {}
             }
