@@ -1,6 +1,6 @@
 use crate::{
     config::Investment,
-    core::{HistoricalPeriod, PriceResult},
+    core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult},
     ui,
 };
 use anyhow::{Result, anyhow};
@@ -21,9 +21,9 @@ struct ReturnResult {
 
 pub async fn run(
     portfolios: &[crate::config::Portfolio],
-    symbol_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    isin_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    _currency_provider: &(dyn crate::currency_provider::CurrencyRateProvider + Send + Sync),
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
 ) -> anyhow::Result<()> {
     info!("Calculating returns for investments...");
 

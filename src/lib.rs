@@ -8,7 +8,7 @@ pub mod returns;
 pub mod summary;
 pub mod ui;
 
-use crate::price_provider::PriceResult;
+use crate::core::PriceResult;
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
