@@ -1,6 +1,6 @@
+use super::ui;
 use crate::core::config::{Investment, Portfolio};
 use crate::core::{CurrencyRateProvider, PriceProvider, PriceResult};
-use super::ui;
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
@@ -366,7 +366,7 @@ mod tests {
     use crate::core::config::{FixedDepositInvestment, Investment, StockInvestment};
     use crate::core::currency::CurrencyRateProvider;
     use crate::core::price::PriceResult;
-    use anyhow::{anyhow, Result};
+    use anyhow::{Result, anyhow};
     use async_trait::async_trait;
     use std::collections::HashMap;
 
