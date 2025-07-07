@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
 fn setup() -> anyhow::Result<()> {
     use anyhow::Context;
 
-    let path = xmf::config::AppConfig::default_config_path()?;
+    let path = xmf::core::config::AppConfig::default_config_path()?;
 
     if path.exists() {
         anyhow::bail!("Configuration file already exists at {}", path.display());

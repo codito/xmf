@@ -1,6 +1,4 @@
-pub mod cache;
 pub mod cli;
-pub mod config;
 pub mod core;
 pub mod providers;
 
@@ -21,14 +19,14 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
     info!("Funds Tracker starting...");
 
     let config = match config_path {
-        Some(path) => config::AppConfig::load_from_path(path)?,
-        None => config::AppConfig::load()?,
+        Some(path) => core::config::AppConfig::load_from_path(path)?,
+        None => core::config::AppConfig::load()?,
     };
     debug!("Loaded config: {config:#?}");
 
     // Create shared caches
-    let price_cache = Arc::new(cache::Cache::<String, PriceResult>::new());
-    let rate_cache = Arc::new(cache::Cache::<String, f64>::new());
+    let price_cache = Arc::new(core::cache::Cache::<String, PriceResult>::new());
+    let rate_cache = Arc::new(core::cache::Cache::<String, f64>::new());
 
     // Initialize providers
     let (symbol_provider, isin_provider, currency_provider) =
@@ -67,9 +65,9 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
 }
 
 fn setup_providers(
-    config: &config::AppConfig,
-    price_cache: &Arc<cache::Cache<String, PriceResult>>,
-    rate_cache: &Arc<cache::Cache<String, f64>>,
+    config: &core::config::AppConfig,
+    price_cache: &Arc<core::cache::Cache<String, PriceResult>>,
+    rate_cache: &Arc<core::cache::Cache<String, f64>>,
 ) -> (
     Arc<providers::yahoo_finance::YahooFinanceProvider>,
     Arc<providers::amfi_provider::AmfiProvider>,

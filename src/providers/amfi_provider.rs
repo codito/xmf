@@ -1,4 +1,4 @@
-use crate::cache::Cache;
+use crate::core::cache::Cache;
 use crate::core::{HistoricalPeriod, PriceProvider, PriceResult};
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;

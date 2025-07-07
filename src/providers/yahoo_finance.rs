@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, instrument};
 
-use crate::cache::Cache;
+use crate::core::cache::Cache;
 use crate::core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult};
 
 fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]) -> Option<f64> {
