@@ -1,6 +1,6 @@
 use crate::{
     config::Investment,
-    price_provider::{HistoricalPeriod, PriceResult},
+    core::{HistoricalPeriod, PriceResult},
     ui,
 };
 use anyhow::{Result, anyhow};

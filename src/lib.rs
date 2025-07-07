@@ -1,9 +1,8 @@
 pub mod cache;
 pub mod change;
 pub mod config;
-pub mod currency_provider;
+pub mod core;
 pub mod log;
-pub mod price_provider;
 pub mod providers;
 pub mod returns;
 pub mod summary;

@@ -1,6 +1,5 @@
 use crate::config::{Investment, Portfolio};
-use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::{PriceProvider, PriceResult};
+use crate::core::{CurrencyRateProvider, PriceProvider, PriceResult};
 use crate::ui;
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
