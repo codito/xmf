@@ -1,11 +1,9 @@
 pub mod cache;
-pub mod change;
+pub mod cli;
 pub mod config;
 pub mod core;
 pub mod log;
 pub mod providers;
-pub mod returns;
-pub mod summary;
 pub mod ui;
 
 use crate::core::PriceResult;
@@ -40,7 +38,7 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
 
     match command {
         AppCommand::Summary => {
-            summary::run(
+            cli::summary::run(
                 &config.portfolios,
                 &*symbol_provider,
                 &*isin_provider,
@@ -50,7 +48,7 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
             .await
         }
         AppCommand::Change => {
-            change::run(
+            cli::change::run(
                 &config.portfolios,
                 &*symbol_provider,
                 &*isin_provider,
@@ -59,7 +57,7 @@ pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Resu
             .await
         }
         AppCommand::Returns => {
-            returns::run(
+            cli::returns::run(
                 &config.portfolios,
                 &*symbol_provider,
                 &*isin_provider,
