@@ -36,7 +36,7 @@ mod test_utils {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_currency_api() {
-    use xmf::currency_provider::CurrencyRateProvider;
+    use xmf::core::currency::CurrencyRateProvider;
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
@@ -183,7 +183,7 @@ async fn test_full_app_flow_with_mock() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_finance_api() {
-    use xmf::price_provider::PriceProvider;
+    use xmf::core::price::PriceProvider;
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
@@ -223,7 +223,7 @@ async fn test_real_yahoo_finance_api() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
-    use xmf::price_provider::PriceProvider;
+    use xmf::core::price::PriceProvider;
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";

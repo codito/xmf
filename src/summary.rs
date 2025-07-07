@@ -364,9 +364,9 @@ pub async fn generate_portfolio_summary(
 mod tests {
     use super::*;
     use crate::config::{FixedDepositInvestment, Investment, StockInvestment};
-    use crate::currency_provider::CurrencyRateProvider;
-    use crate::price_provider::PriceResult;
-    use anyhow::{Result, anyhow};
+    use crate::core::currency::CurrencyRateProvider;
+    use crate::core::price::PriceResult;
+    use anyhow::{anyhow, Result};
     use async_trait::async_trait;
     use std::collections::HashMap;
 

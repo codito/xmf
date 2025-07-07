@@ -222,7 +222,7 @@ fn display_return_results(results: &[ReturnResult]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::price_provider::{HistoricalPeriod, PriceResult};
+    use crate::core::price::{HistoricalPeriod, PriceResult};
     use std::collections::HashMap;
 
     fn create_test_data() -> PriceResult {
