@@ -1,8 +1,8 @@
 use crate::{
     config::Investment,
     core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult},
-    ui,
 };
+use super::ui;
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use futures::future::join_all;

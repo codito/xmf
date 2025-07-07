@@ -4,7 +4,6 @@ pub mod config;
 pub mod core;
 pub mod log;
 pub mod providers;
-pub mod ui;
 
 use crate::core::PriceResult;
 use anyhow::Result;

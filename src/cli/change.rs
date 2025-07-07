@@ -1,6 +1,6 @@
 use crate::config::Investment;
 use crate::core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider};
-use crate::ui;
+use super::ui;
 use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::BTreeMap;
