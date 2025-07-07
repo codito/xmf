@@ -1,6 +1,6 @@
-use crate::{
-    config::Investment,
-    core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult},
+use crate::core::{
+    config::{Investment, Portfolio},
+    CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult,
 };
 use super::ui;
 use anyhow::{Result, anyhow};
@@ -20,7 +20,7 @@ struct ReturnResult {
 }
 
 pub async fn run(
-    portfolios: &[crate::config::Portfolio],
+    portfolios: &[Portfolio],
     symbol_provider: &(dyn PriceProvider + Send + Sync),
     isin_provider: &(dyn PriceProvider + Send + Sync),
     _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),

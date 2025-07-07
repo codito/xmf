@@ -1,4 +1,4 @@
-use crate::config::Investment;
+use crate::core::config::{Investment, Portfolio};
 use crate::core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider};
 use super::ui;
 use comfy_table::Cell;
@@ -15,7 +15,7 @@ struct ChangeResult {
 }
 
 pub async fn run(
-    portfolios: &[crate::config::Portfolio],
+    portfolios: &[Portfolio],
     symbol_provider: &(dyn PriceProvider + Send + Sync),
     isin_provider: &(dyn PriceProvider + Send + Sync),
     _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
