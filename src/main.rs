@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
-use xmf::log::init_logging;
+use xmf::core::log::init_logging;
 
 #[derive(Parser)]
 #[command(version, about)]

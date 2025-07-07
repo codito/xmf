@@ -1,6 +1,7 @@
 //! Core business logic abstractions
 
 pub mod currency;
+pub mod log;
 pub mod price;
 
 // Re-export main types for cleaner imports

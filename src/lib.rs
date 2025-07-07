@@ -2,7 +2,6 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod core;
-pub mod log;
 pub mod providers;
 
 use crate::core::PriceResult;
