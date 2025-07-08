@@ -1,7 +1,6 @@
-use crate::config::{Investment, Portfolio};
-use crate::currency_provider::CurrencyRateProvider;
-use crate::price_provider::{PriceProvider, PriceResult};
-use crate::ui;
+use super::ui;
+use crate::core::config::{Investment, Portfolio};
+use crate::core::{CurrencyRateProvider, PriceProvider, PriceResult};
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
 use console::style;
@@ -255,17 +254,17 @@ pub async fn generate_portfolio_summary(
 
     for investment in &portfolio.investments {
         let (identifier, units, needs_fetch, currency, value) = match investment {
-            crate::config::Investment::FixedDeposit(fd) => (
+            crate::core::config::Investment::FixedDeposit(fd) => (
                 fd.name.clone(),
                 None,
                 false,
                 fd.currency.clone().or(Some(portfolio_currency.to_string())),
                 Some(fd.value),
             ),
-            crate::config::Investment::Stock(s) => {
+            crate::core::config::Investment::Stock(s) => {
                 (s.symbol.clone(), Some(s.units), true, None, None)
             }
-            crate::config::Investment::MutualFund(mf) => {
+            crate::core::config::Investment::MutualFund(mf) => {
                 (mf.isin.clone(), Some(mf.units), true, None, None)
             }
         };
@@ -364,9 +363,9 @@ pub async fn generate_portfolio_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{FixedDepositInvestment, Investment, StockInvestment};
-    use crate::currency_provider::CurrencyRateProvider;
-    use crate::price_provider::PriceResult;
+    use crate::core::config::{FixedDepositInvestment, Investment, StockInvestment};
+    use crate::core::currency::CurrencyRateProvider;
+    use crate::core::price::PriceResult;
     use anyhow::{Result, anyhow};
     use async_trait::async_trait;
     use std::collections::HashMap;

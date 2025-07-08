@@ -1,6 +1,6 @@
-use crate::config::Investment;
-use crate::price_provider::HistoricalPeriod;
-use crate::ui;
+use super::ui;
+use crate::core::config::{Investment, Portfolio};
+use crate::core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider};
 use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::BTreeMap;
@@ -15,10 +15,10 @@ struct ChangeResult {
 }
 
 pub async fn run(
-    portfolios: &[crate::config::Portfolio],
-    symbol_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    isin_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    _currency_provider: &(dyn crate::currency_provider::CurrencyRateProvider + Send + Sync),
+    portfolios: &[Portfolio],
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
 ) -> anyhow::Result<()> {
     let mut investments_to_fetch = HashMap::new();
     for portfolio in portfolios {

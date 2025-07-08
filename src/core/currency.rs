@@ -1,4 +1,4 @@
-//! Provides currency rate conversion for the application.
+//! Currency conversion abstractions
 
 use anyhow::Result;
 use async_trait::async_trait;

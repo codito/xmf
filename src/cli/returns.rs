@@ -1,7 +1,7 @@
-use crate::{
-    config::Investment,
-    price_provider::{HistoricalPeriod, PriceResult},
-    ui,
+use super::ui;
+use crate::core::{
+    CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult,
+    config::{Investment, Portfolio},
 };
 use anyhow::{Result, anyhow};
 use comfy_table::Cell;
@@ -20,10 +20,10 @@ struct ReturnResult {
 }
 
 pub async fn run(
-    portfolios: &[crate::config::Portfolio],
-    symbol_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    isin_provider: &(dyn crate::price_provider::PriceProvider + Send + Sync),
-    _currency_provider: &(dyn crate::currency_provider::CurrencyRateProvider + Send + Sync),
+    portfolios: &[Portfolio],
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
 ) -> anyhow::Result<()> {
     info!("Calculating returns for investments...");
 
@@ -222,7 +222,7 @@ fn display_return_results(results: &[ReturnResult]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::price_provider::{HistoricalPeriod, PriceResult};
+    use crate::core::price::{HistoricalPeriod, PriceResult};
     use std::collections::HashMap;
 
     fn create_test_data() -> PriceResult {

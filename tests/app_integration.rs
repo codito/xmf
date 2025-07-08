@@ -36,11 +36,12 @@ mod test_utils {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_currency_api() {
-    use xmf::currency_provider::CurrencyRateProvider;
+    use xmf::core::cache::Cache;
+    use xmf::core::currency::CurrencyRateProvider;
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let cache = std::sync::Arc::new(Cache::new());
     let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
@@ -183,11 +184,12 @@ async fn test_full_app_flow_with_mock() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_finance_api() {
-    use xmf::price_provider::PriceProvider;
+    use xmf::core::cache::Cache;
+    use xmf::core::price::PriceProvider;
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let cache = std::sync::Arc::new(Cache::new());
     let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
@@ -223,11 +225,12 @@ async fn test_real_yahoo_finance_api() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
-    use xmf::price_provider::PriceProvider;
+    use xmf::core::cache::Cache;
+    use xmf::core::price::PriceProvider;
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(xmf::cache::Cache::new());
+    let cache = std::sync::Arc::new(Cache::new());
     let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
