@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
+use std::path::PathBuf;
 use xmf::core::log::init_logging;
 
 #[derive(Parser)]
@@ -9,9 +10,13 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
-    /// Path to optional configuration file
-    #[arg(short, long, global = true)]
-    config_path: Option<String>,
+    /// Path to custom configuration file (overrides default config search)
+    #[arg(short, long, global = true, value_name = "FILE", conflicts_with = "config_name")]
+    config_path: Option<PathBuf>,
+
+    /// Use a named configuration from the default config directory
+    #[arg(short = 'n', long = "config-name", global = true, value_name = "NAME", conflicts_with = "config_path")]
+    config_name: Option<String>,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -47,9 +52,19 @@ async fn main() -> Result<()> {
 
     init_logging(cli.verbose);
 
+    let config_arg = if let Some(name) = &cli.config_name {
+        let mut path = xmf::core::config::AppConfig::default_config_path()?;
+        // Pop the default config file name to get the config directory
+        path.pop();
+        path.push(format!("{}.yaml", name));
+        Some(path)
+    } else {
+        cli.config_path
+    };
+
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        Some(cmd) => xmf::run_command(cmd.into(), cli.config_path.as_deref()).await,
+        Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref()).await,
         None => {
             Cli::command().print_help()?;
             Ok(())
