@@ -53,10 +53,24 @@ async fn main() -> Result<()> {
     init_logging(cli.verbose);
 
     let config_arg = if let Some(name) = &cli.config_name {
-        let mut path = xmf::core::config::AppConfig::default_config_path()?;
+        let mut base_path = xmf::core::config::AppConfig::default_config_path()?;
         // Pop the default config file name to get the config directory
-        path.pop();
-        path.push(format!("{}.yaml", name));
+        base_path.pop();
+        
+        // Check for both yaml and yml extensions
+        let extensions = ["yaml", "yml"];
+        let path = extensions.iter()
+            .map(|ext| {
+                let mut path = base_path.clone();
+                path.push(format!("{name}.{ext}"));
+                path
+            })
+            .find(|path| path.exists())
+            .ok_or_else(|| anyhow::anyhow!(
+                "No config file found for name '{}' with extensions {:?} in config directory", 
+                name, extensions
+            ))?;
+            
         Some(path)
     } else {
         cli.config_path
