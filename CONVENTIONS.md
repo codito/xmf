@@ -22,7 +22,7 @@ code minimal and clean.
 
 ### Design
 
-- You must respect DRY, SOLID and similar clean code practices.
+- You must respect DRY, SOLID, and similar clean code practices.
 - Do not introduce unnecessary dependencies.
 - Code must be correct and performant.
 - Remember you're pairing with another senior dev, ask when you're in doubt.
