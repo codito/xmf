@@ -11,11 +11,23 @@ struct Cli {
     verbose: bool,
 
     /// Path to custom configuration file (overrides default config search)
-    #[arg(short, long, global = true, value_name = "FILE", conflicts_with = "config_name")]
+    #[arg(
+        short,
+        long,
+        global = true,
+        value_name = "FILE",
+        conflicts_with = "config_name"
+    )]
     config_path: Option<PathBuf>,
 
     /// Use a named configuration from the default config directory
-    #[arg(short = 'n', long = "config-name", global = true, value_name = "NAME", conflicts_with = "config_path")]
+    #[arg(
+        short = 'n',
+        long = "config-name",
+        global = true,
+        value_name = "NAME",
+        conflicts_with = "config_path"
+    )]
     config_name: Option<String>,
 
     #[command(subcommand)]
@@ -52,14 +64,15 @@ async fn main() -> Result<()> {
 
     init_logging(cli.verbose);
 
-    let config_arg = if let Some(name) = &cli.config_name {
-        let mut base_path = xmf::core::config::AppConfig::default_config_path()?;
-        // Pop the default config file name to get the config directory
-        base_path.pop();
-        
-        // Check for both yaml and yml extensions
-        let extensions = ["yaml", "yml"];
-        let path = extensions.iter()
+    let config_arg =
+        if let Some(name) = &cli.config_name {
+            let mut base_path = xmf::core::config::AppConfig::default_config_path()?;
+            // Pop the default config file name to get the config directory
+            base_path.pop();
+
+            // Check for both yaml and yml extensions
+            let extensions = ["yaml", "yml"];
+            let path = extensions.iter()
             .map(|ext| {
                 let mut path = base_path.clone();
                 path.push(format!("{name}.{ext}"));
@@ -70,11 +83,11 @@ async fn main() -> Result<()> {
                 "No config file found for name '{}' with extensions {:?} in config directory", 
                 name, extensions
             ))?;
-            
-        Some(path)
-    } else {
-        cli.config_path
-    };
+
+            Some(path)
+        } else {
+            cli.config_path
+        };
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
