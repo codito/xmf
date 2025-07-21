@@ -104,7 +104,7 @@ async fn test_full_app_flow_with_amfi_mock() {
     // Run app and verify success
     let result = xmf::run_command(
         xmf::AppCommand::Summary,
-        Some(config_path.to_str().unwrap()),
+        Some(config_path),
     )
     .await;
     assert!(
@@ -172,7 +172,7 @@ async fn test_full_app_flow_with_mock() {
     // Run app and verify success
     let result = xmf::run_command(
         xmf::AppCommand::Summary,
-        Some(config_path.to_str().unwrap()),
+        Some(config_path),
     )
     .await;
     assert!(
