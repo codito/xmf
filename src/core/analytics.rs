@@ -206,7 +206,6 @@ mod tests {
             let key = format!("{from}:{to}");
             self.rates.insert(key, rate);
         }
-
     }
 
     #[async_trait]
