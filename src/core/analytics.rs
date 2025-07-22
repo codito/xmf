@@ -193,14 +193,12 @@ mod tests {
     // MockCurrencyProvider for CurrencyRateProvider
     struct MockCurrencyProvider {
         rates: HashMap<String, f64>,
-        error_rates: HashMap<String, String>,
     }
 
     impl MockCurrencyProvider {
         fn new() -> Self {
             MockCurrencyProvider {
                 rates: HashMap::new(),
-                error_rates: HashMap::new(),
             }
         }
 
@@ -209,19 +207,12 @@ mod tests {
             self.rates.insert(key, rate);
         }
 
-        fn add_error(&mut self, from: &str, to: &str, error_msg: &str) {
-            let key = format!("{from}:{to}");
-            self.error_rates.insert(key, error_msg.to_string());
-        }
     }
 
     #[async_trait]
     impl CurrencyRateProvider for MockCurrencyProvider {
         async fn get_rate(&self, from: &str, to: &str) -> Result<f64> {
             let key = format!("{from}:{to}");
-            if let Some(error_msg) = self.error_rates.get(&key) {
-                return Err(anyhow!(error_msg.clone()));
-            }
             self.rates
                 .get(&key)
                 .cloned()

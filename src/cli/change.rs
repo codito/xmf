@@ -244,12 +244,8 @@ mod tests {
 
     #[async_trait]
     impl CurrencyRateProvider for MockCurrencyProvider {
-        async fn get_rate(&self, from: &str, to: &str) -> Result<f64> {
-            if from == to {
-                Ok(1.0)
-            } else {
-                Ok(1.0) // Assume 1:1 for simplicity in tests
-            }
+        async fn get_rate(&self, _from: &str, _to: &str) -> Result<f64> {
+            Ok(1.0) // Assume 1:1 for simplicity in tests
         }
     }
 
