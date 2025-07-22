@@ -15,7 +15,7 @@ pub enum AppCommand {
 }
 
 /// Common command execution entry point
-pub async fn run_command(command: AppCommand, config_path: Option<&str>) -> Result<()> {
+pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Path>) -> Result<()> {
     info!("Funds Tracker starting...");
 
     let config = match config_path {
