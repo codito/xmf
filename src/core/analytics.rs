@@ -8,7 +8,7 @@ use tracing::debug;
 
 /// Represents the calculated value and weight of a single investment holding.
 #[derive(Debug, Clone)]
-pub struct InvestmentHolding {
+pub struct InvestmentValue {
     pub identifier: String,
     pub short_name: Option<String>,
     pub units: Option<f64>,
@@ -23,9 +23,9 @@ pub struct InvestmentHolding {
 /// Represents a summary of a portfolio's holdings, with all values
 /// normalized to a target currency.
 #[derive(Debug)]
-pub struct PortfolioHoldings {
+pub struct PortfolioValue {
     pub name: String,
-    pub investments: Vec<InvestmentHolding>,
+    pub investments: Vec<InvestmentValue>,
     pub total_converted_value: Option<f64>,
     pub target_currency: String,
 }
@@ -35,14 +35,14 @@ pub struct PortfolioHoldings {
 /// This function normalizes all investment values into a single `target_currency`
 /// to provide a consolidated view of the portfolio's holdings. It is a pure
 /// calculation function. Progress updates can be reported via the `update_callback`.
-pub async fn calculate_portfolio_holdings(
+pub async fn calculate_portfolio_value(
     portfolio: &Portfolio,
     price_results: &HashMap<String, Result<PriceResult>>,
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     target_currency: &str,
     update_callback: &(dyn Fn()),
-) -> PortfolioHoldings {
-    let mut holdings = PortfolioHoldings {
+) -> PortfolioValue {
+    let mut holdings = PortfolioValue {
         name: portfolio.name.clone(),
         investments: Vec::new(),
         total_converted_value: None,
@@ -64,7 +64,7 @@ pub async fn calculate_portfolio_holdings(
             Investment::MutualFund(mf) => (mf.isin.clone(), Some(mf.units), true, None, None),
         };
 
-        let mut holding = InvestmentHolding {
+        let mut holding = InvestmentValue {
             identifier: identifier.clone(),
             short_name: None,
             units,
@@ -248,7 +248,7 @@ mod tests {
                 units: 10.0,
             })],
         };
-        let holdings = calculate_portfolio_holdings(
+        let holdings = calculate_portfolio_value(
             &portfolio,
             &price_results,
             &currency_provider,
@@ -300,7 +300,7 @@ mod tests {
             ],
         };
 
-        let holdings = calculate_portfolio_holdings(
+        let holdings = calculate_portfolio_value(
             &portfolio,
             &price_results,
             &currency_provider,
@@ -356,7 +356,7 @@ mod tests {
             ],
         };
 
-        let holdings = calculate_portfolio_holdings(
+        let holdings = calculate_portfolio_value(
             &portfolio,
             &price_results,
             &currency_provider,
@@ -395,7 +395,7 @@ mod tests {
             })],
         };
 
-        let holdings = calculate_portfolio_holdings(
+        let holdings = calculate_portfolio_value(
             &portfolio,
             &price_results,
             &currency_provider,

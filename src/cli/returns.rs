@@ -103,7 +103,7 @@ async fn calculate_portfolio_returns(
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     target_currency: &str,
 ) -> PortfolioReturnResult {
-    let holdings = analytics::calculate_portfolio_holdings(
+    let holdings = analytics::calculate_portfolio_value(
         portfolio,
         price_results,
         currency_provider,

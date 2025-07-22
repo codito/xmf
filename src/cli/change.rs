@@ -96,7 +96,7 @@ async fn calculate_portfolio_changes(
     target_currency: &str,
 ) -> PortfolioChangeResult {
     // First, get weights for all investments in the portfolio
-    let holdings = analytics::calculate_portfolio_holdings(
+    let holdings = analytics::calculate_portfolio_value(
         portfolio,
         price_results,
         currency_provider,

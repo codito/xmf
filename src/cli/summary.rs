@@ -148,7 +148,7 @@ pub async fn run(
         let pb_clone = pb.clone();
         let price_results = &price_results;
         async move {
-            analytics::calculate_portfolio_holdings(
+            analytics::calculate_portfolio_value(
                 portfolio,
                 price_results,
                 currency_provider,
