@@ -1,6 +1,6 @@
 use super::ui;
 use crate::core::{
-    analytics, CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult,
+    CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult, analytics,
     config::{Investment, Portfolio},
 };
 use anyhow::{Result, anyhow};
@@ -286,9 +286,9 @@ mod tests {
     use super::*;
     use crate::core::config::StockInvestment;
     use crate::core::currency::CurrencyRateProvider;
+    use crate::core::price::{HistoricalPeriod, PriceResult};
     use anyhow::Result;
     use async_trait::async_trait;
-    use crate::core::price::{HistoricalPeriod, PriceResult};
     use std::collections::HashMap;
 
     fn create_test_data() -> PriceResult {

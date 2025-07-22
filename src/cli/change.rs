@@ -1,6 +1,6 @@
 use super::ui;
 use crate::core::config::{Investment, Portfolio};
-use crate::core::{analytics, CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult};
+use crate::core::{CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult, analytics};
 use anyhow::Result;
 use comfy_table::{Attribute, Cell};
 use futures::future::join_all;
@@ -234,7 +234,7 @@ fn display_results(result: &PortfolioChangeResult) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::config::{StockInvestment, Investment};
+    use crate::core::config::{Investment, StockInvestment};
     use crate::core::currency::CurrencyRateProvider;
     use anyhow::Result;
     use async_trait::async_trait;
@@ -290,13 +290,9 @@ mod tests {
         );
 
         let currency_provider = MockCurrencyProvider;
-        let result = calculate_portfolio_changes(
-            &portfolio,
-            &price_results,
-            &currency_provider,
-            "USD",
-        )
-        .await;
+        let result =
+            calculate_portfolio_changes(&portfolio, &price_results, &currency_provider, "USD")
+                .await;
 
         assert_eq!(result.name, "Tech");
         assert_eq!(result.investment_changes.len(), 2);
@@ -349,13 +345,9 @@ mod tests {
         );
 
         let currency_provider = MockCurrencyProvider;
-        let result = calculate_portfolio_changes(
-            &portfolio,
-            &price_results,
-            &currency_provider,
-            "USD",
-        )
-        .await;
+        let result =
+            calculate_portfolio_changes(&portfolio, &price_results, &currency_provider, "USD")
+                .await;
 
         // Weighted average should still be the same since individual changes are the same
         let weighted_change = result.portfolio_changes[&HistoricalPeriod::OneDay];
@@ -386,7 +378,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Apple".to_string()),
                 historical_prices: HashMap::from([
-                    (HistoricalPeriod::OneDay, 90.0), // +11.11%
+                    (HistoricalPeriod::OneDay, 90.0),   // +11.11%
                     (HistoricalPeriod::FiveDays, 80.0), // +25%
                 ]),
             }),
@@ -403,20 +395,22 @@ mod tests {
         );
 
         let currency_provider = MockCurrencyProvider;
-        let result = calculate_portfolio_changes(
-            &portfolio,
-            &price_results,
-            &currency_provider,
-            "USD",
-        )
-        .await;
+        let result =
+            calculate_portfolio_changes(&portfolio, &price_results, &currency_provider, "USD")
+                .await;
 
         let one_day_change = result.portfolio_changes[&HistoricalPeriod::OneDay];
-        assert!((one_day_change - 11.11).abs() < 0.02, "1D change was {one_day_change}");
+        assert!(
+            (one_day_change - 11.11).abs() < 0.02,
+            "1D change was {one_day_change}"
+        );
 
         // For 5D, only AAPL contributes. Its weight among contributors is 100%.
         // So the portfolio change for 5D should just be AAPL's change.
         let five_day_change = result.portfolio_changes[&HistoricalPeriod::FiveDays];
-        assert!((five_day_change - 25.0).abs() < 0.01, "5D change was {five_day_change}");
+        assert!(
+            (five_day_change - 25.0).abs() < 0.01,
+            "5D change was {five_day_change}"
+        );
     }
 }

@@ -2,7 +2,7 @@
 use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
 use crate::core::price::PriceResult;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -57,7 +57,9 @@ pub async fn calculate_portfolio_value(
                 fd.name.clone(),
                 None,
                 false,
-                fd.currency.clone().or_else(|| Some(target_currency.to_string())),
+                fd.currency
+                    .clone()
+                    .or_else(|| Some(target_currency.to_string())),
                 Some(fd.value),
             ),
             Investment::Stock(s) => (s.symbol.clone(), Some(s.units), true, None, None),
