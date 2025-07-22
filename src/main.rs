@@ -48,13 +48,12 @@ impl From<Commands> for xmf::AppCommand {
 #[derive(Subcommand)]
 enum Commands {
     /// Create default configuration
-    /// Create default configuration
     Setup,
     /// Display portfolio summary
     Summary,
     /// Display price change summary
     Change,
-    /// Display XIRR return calculations
+    /// Display CAGR return calculations
     Returns,
 }
 
