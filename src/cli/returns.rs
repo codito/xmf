@@ -84,7 +84,7 @@ pub async fn run(
         if !result.investment_returns.is_empty() {
             println!(
                 "\nPortfolio: {}",
-                ui::style_text(&portfolio.name, ui::StyleType::Title)
+                ui::style_text(&result.name, ui::StyleType::Title)
             );
             display_return_results(&result);
 
