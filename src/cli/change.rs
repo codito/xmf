@@ -1,11 +1,11 @@
 use super::ui;
 use crate::core::config::{Investment, Portfolio};
 use crate::core::{analytics, CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult};
+use anyhow::Result;
 use comfy_table::{Attribute, Cell};
 use futures::future::join_all;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use tracing::debug;
 
 #[derive(Clone)]
 struct ChangeResult {
