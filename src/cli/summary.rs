@@ -1,37 +1,15 @@
 use super::ui;
 use crate::core::config::{Investment, Portfolio};
-use crate::core::{CurrencyRateProvider, PriceProvider, PriceResult, analytics};
+use crate::core::{analytics::PortfolioValue, CurrencyRateProvider, PriceProvider, PriceResult, analytics};
 use anyhow::Result;
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
-pub struct InvestmentSummary {
-    pub symbol: String,
-    pub short_name: Option<String>,
-    pub units: Option<f64>,
-    pub current_price: Option<f64>,
-    pub current_value: Option<f64>,
-    pub currency: Option<String>,
-    pub converted_value: Option<f64>,
-    pub weight_pct: Option<f64>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct PortfolioSummary {
-    pub name: String,
-    pub total_value: Option<f64>,
-    pub converted_value: Option<f64>,
-    pub currency: Option<String>,
-    pub investments: Vec<InvestmentSummary>,
-}
-
-impl PortfolioSummary {
+impl PortfolioValue {
     pub fn display_as_table(&self) -> String {
-        let target_currency = self.currency.as_deref().unwrap_or("N/A");
+        let target_currency = &self.target_currency;
 
         let mut table = ui::new_styled_table();
 
@@ -44,21 +22,21 @@ impl PortfolioSummary {
         ]);
 
         for investment in &self.investments {
-            let currency = investment.currency.as_deref().unwrap_or("N/A").to_string();
+            let currency = investment.value_currency.as_deref().unwrap_or("N/A").to_string();
 
             let symbol_cell_content = if let Some(name) = &investment.short_name {
                 name.clone()
             } else {
-                investment.symbol.clone()
+                investment.identifier.clone()
             };
 
             let units = ui::format_optional_cell(investment.units, |u| format!("{u:.2}"));
             let current_price =
-                ui::format_optional_cell(investment.current_price, |p| format!("{p:.2}{currency}"));
+                ui::format_optional_cell(investment.price, |p| format!("{p:.2}{currency}"));
             let converted_value =
                 ui::format_optional_cell(investment.converted_value, |v| format!("{v:.2}"));
             let weight_pct =
-                ui::format_optional_cell(investment.weight_pct, |w| format!("{w:.2}%"));
+                ui::format_optional_cell(investment.weight, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 Cell::new(symbol_cell_content),
@@ -69,13 +47,13 @@ impl PortfolioSummary {
             ]);
         }
 
-        let total_style_type = if self.converted_value.is_some() {
+        let total_style_type = if self.total_converted_value.is_some() {
             ui::StyleType::TotalValue
         } else {
             ui::StyleType::Error
         };
         let total_converted_value = self
-            .converted_value
+            .total_converted_value
             .map_or("N/A".to_string(), |v| format!("{v:.2}"));
 
         // Portfolio name at top
@@ -159,45 +137,15 @@ pub async fn run(
         }
     });
 
-    let holdings_results = join_all(holdings_futures).await;
+    let summaries = join_all(holdings_futures).await;
     pb.finish_and_clear();
-
-    // Map analytics results to display models
-    let summaries: Vec<PortfolioSummary> = holdings_results
-        .into_iter()
-        .map(|holdings| {
-            let investments = holdings
-                .investments
-                .into_iter()
-                .map(|h| InvestmentSummary {
-                    symbol: h.identifier,
-                    short_name: h.short_name,
-                    units: h.units,
-                    current_price: h.price,
-                    current_value: h.value,
-                    currency: h.value_currency,
-                    converted_value: h.converted_value,
-                    weight_pct: h.weight,
-                    error: h.error,
-                })
-                .collect();
-
-            PortfolioSummary {
-                name: holdings.name,
-                total_value: None, // Not calculated in analytics, not used for display
-                converted_value: holdings.total_converted_value,
-                currency: Some(holdings.target_currency),
-                investments,
-            }
-        })
-        .collect();
 
     // Step 2: Calculate grand total and display summaries
     let mut grand_total = 0.0;
     let mut all_portfolios_valid = true;
 
     for sum in &summaries {
-        if let Some(value) = sum.converted_value {
+        if let Some(value) = sum.total_converted_value {
             grand_total += value;
         } else {
             all_portfolios_valid = false;
