@@ -1,12 +1,11 @@
 use super::ui;
 use crate::core::config::{Investment, Portfolio};
-use crate::core::{analytics, CurrencyRateProvider, PriceProvider, PriceResult};
+use crate::core::{CurrencyRateProvider, PriceProvider, PriceResult, analytics};
 use anyhow::Result;
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
 use std::collections::HashMap;
-use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub struct InvestmentSummary {
@@ -226,4 +225,3 @@ pub async fn run(
 
     Ok(())
 }
-
