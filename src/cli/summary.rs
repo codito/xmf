@@ -1,6 +1,8 @@
 use super::ui;
 use crate::core::config::{Investment, Portfolio};
-use crate::core::{analytics::PortfolioValue, CurrencyRateProvider, PriceProvider, PriceResult, analytics};
+use crate::core::{
+    CurrencyRateProvider, PriceProvider, PriceResult, analytics, analytics::PortfolioValue,
+};
 use anyhow::Result;
 use comfy_table::Cell;
 use console::style;
@@ -22,7 +24,11 @@ impl PortfolioValue {
         ]);
 
         for investment in &self.investments {
-            let currency = investment.value_currency.as_deref().unwrap_or("N/A").to_string();
+            let currency = investment
+                .value_currency
+                .as_deref()
+                .unwrap_or("N/A")
+                .to_string();
 
             let symbol_cell_content = if let Some(name) = &investment.short_name {
                 name.clone()
@@ -35,8 +41,7 @@ impl PortfolioValue {
                 ui::format_optional_cell(investment.price, |p| format!("{p:.2}{currency}"));
             let converted_value =
                 ui::format_optional_cell(investment.converted_value, |v| format!("{v:.2}"));
-            let weight_pct =
-                ui::format_optional_cell(investment.weight, |w| format!("{w:.2}%"));
+            let weight_pct = ui::format_optional_cell(investment.weight, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
                 Cell::new(symbol_cell_content),
