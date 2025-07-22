@@ -1,10 +1,10 @@
 use super::ui;
 use crate::core::{
-    CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult,
+    analytics, CurrencyRateProvider, HistoricalPeriod, PriceProvider, PriceResult,
     config::{Investment, Portfolio},
 };
 use anyhow::{Result, anyhow};
-use comfy_table::Cell;
+use comfy_table::{Attribute, Cell};
 use futures::future::join_all;
 use rust_decimal::{Decimal, prelude::*};
 use rust_finprim::rate::cagr;
@@ -19,11 +19,18 @@ struct ReturnResult {
     error: Option<String>,
 }
 
+struct PortfolioReturnResult {
+    name: String,
+    investment_returns: Vec<ReturnResult>,
+    portfolio_cagrs: BTreeMap<HistoricalPeriod, f64>,
+}
+
 pub async fn run(
     portfolios: &[Portfolio],
     symbol_provider: &(dyn PriceProvider + Send + Sync),
     isin_provider: &(dyn PriceProvider + Send + Sync),
-    _currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    target_currency: &str,
 ) -> anyhow::Result<()> {
     info!("Calculating returns for investments...");
 
@@ -47,6 +54,7 @@ pub async fn run(
         return Ok(());
     }
 
+    // Step 1: Fetch all prices concurrently
     let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
 
     let futures = investments_to_fetch.into_iter().map(|(id, provider)| {
@@ -62,57 +70,23 @@ pub async fn run(
         join_all(futures).await.into_iter().collect();
     pb.finish_and_clear();
 
-    let mut return_results: Vec<ReturnResult> = Vec::new();
-
-    for (identifier, price_result) in fetched_results {
-        debug!("Calculating CAGR for {identifier}");
-        match price_result {
-            Ok(price_data) => match calculate_cagr(&price_data) {
-                Ok(cagrs) => return_results.push(ReturnResult {
-                    identifier,
-                    short_name: price_data.short_name.clone(),
-                    cagrs,
-                    error: None,
-                }),
-                Err(e) => return_results.push(ReturnResult {
-                    identifier,
-                    short_name: None,
-                    cagrs: BTreeMap::new(),
-                    error: Some(format!("CAGR calculation failed: {e}")),
-                }),
-            },
-            Err(e) => return_results.push(ReturnResult {
-                identifier,
-                short_name: None,
-                cagrs: BTreeMap::new(),
-                error: Some(format!("Price fetch failed: {e}")),
-            }),
-        }
-    }
-
-    let return_results_map: HashMap<String, ReturnResult> = return_results
-        .into_iter()
-        .map(|r| (r.identifier.clone(), r))
-        .collect();
-
+    // Step 2: Process results for each portfolio
     let num_portfolios = portfolios.len();
     for (i, portfolio) in portfolios.iter().enumerate() {
-        let portfolio_results: Vec<ReturnResult> = portfolio
-            .investments
-            .iter()
-            .filter_map(|investment| match investment {
-                Investment::Stock(s) => return_results_map.get(&s.symbol).cloned(),
-                Investment::MutualFund(mf) => return_results_map.get(&mf.isin).cloned(),
-                Investment::FixedDeposit(_) => None,
-            })
-            .collect();
+        let result = calculate_portfolio_returns(
+            portfolio,
+            &fetched_results,
+            currency_provider,
+            target_currency,
+        )
+        .await;
 
-        if !portfolio_results.is_empty() {
+        if !result.investment_returns.is_empty() {
             println!(
                 "\nPortfolio: {}",
                 ui::style_text(&portfolio.name, ui::StyleType::Title)
             );
-            display_return_results(&portfolio_results);
+            display_return_results(&result);
 
             if i < num_portfolios - 1 {
                 ui::print_separator();
@@ -120,11 +94,86 @@ pub async fn run(
         }
     }
 
-    if return_results_map.is_empty() {
-        println!("No return results to display.");
+    Ok(())
+}
+
+async fn calculate_portfolio_returns(
+    portfolio: &Portfolio,
+    price_results: &HashMap<String, Result<PriceResult>>,
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    target_currency: &str,
+) -> PortfolioReturnResult {
+    let holdings = analytics::calculate_portfolio_holdings(
+        portfolio,
+        price_results,
+        currency_provider,
+        target_currency,
+        &|| (), // No progress updates needed here
+    )
+    .await;
+
+    let mut investment_returns = Vec::new();
+    let mut portfolio_cagrs: BTreeMap<HistoricalPeriod, f64> = BTreeMap::new();
+    let mut period_contributors: BTreeMap<HistoricalPeriod, f64> = BTreeMap::new();
+
+    for holding in &holdings.investments {
+        if holding.units.is_none() {
+            continue;
+        }
+
+        if let Some(e) = &holding.error {
+            investment_returns.push(ReturnResult {
+                identifier: holding.identifier.clone(),
+                short_name: holding.short_name.clone(),
+                cagrs: BTreeMap::new(),
+                error: Some(e.clone()),
+            });
+            continue;
+        }
+
+        let mut result = ReturnResult {
+            identifier: holding.identifier.clone(),
+            short_name: holding.short_name.clone(),
+            cagrs: BTreeMap::new(),
+            error: None,
+        };
+
+        if let Some(Ok(price_data)) = price_results.get(&holding.identifier) {
+            match calculate_cagr(price_data) {
+                Ok(cagrs) => {
+                    if let Some(weight) = holding.weight {
+                        for (period, cagr_val) in &cagrs {
+                            let weighted_value = cagr_val * (weight / 100.0);
+                            *portfolio_cagrs.entry(*period).or_insert(0.0) += weighted_value;
+                            *period_contributors.entry(*period).or_insert(0.0) += weight / 100.0;
+                        }
+                    }
+                    result.cagrs = cagrs;
+                }
+                Err(e) => {
+                    result.error = Some(format!("CAGR calculation failed: {e}"));
+                }
+            }
+        } else {
+            result.error = Some("Price data not available".to_string());
+        }
+
+        investment_returns.push(result);
     }
 
-    Ok(())
+    for (period, total_weight) in &period_contributors {
+        if let Some(weighted_cagr) = portfolio_cagrs.get_mut(period) {
+            if *total_weight > 0.0 {
+                *weighted_cagr /= *total_weight;
+            }
+        }
+    }
+
+    PortfolioReturnResult {
+        name: portfolio.name.clone(),
+        investment_returns,
+        portfolio_cagrs,
+    }
 }
 
 fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod, f64>> {
@@ -183,7 +232,7 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
     }
 }
 
-fn display_return_results(results: &[ReturnResult]) {
+fn display_return_results(result: &PortfolioReturnResult) {
     let mut table = ui::new_styled_table();
     let periods = [
         HistoricalPeriod::OneYear,
@@ -198,7 +247,7 @@ fn display_return_results(results: &[ReturnResult]) {
     }
     table.set_header(header);
 
-    for result in results {
+    for result in &result.investment_returns {
         let name_display = if let Some(name) = &result.short_name {
             name.clone()
         } else {
@@ -216,12 +265,29 @@ fn display_return_results(results: &[ReturnResult]) {
         table.add_row(row_cells);
     }
 
+    if !result.portfolio_cagrs.is_empty() && result.investment_returns.len() > 1 {
+        let mut total_row_cells =
+            vec![Cell::new("Portfolio Weighted").add_attribute(Attribute::Bold)];
+        for period in &periods {
+            let cell = match result.portfolio_cagrs.get(period) {
+                Some(cagr) => ui::change_cell(*cagr),
+                None => ui::na_cell(false),
+            };
+            total_row_cells.push(cell);
+        }
+        table.add_row(total_row_cells);
+    }
+
     println!("{table}");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::config::StockInvestment;
+    use crate::core::currency::CurrencyRateProvider;
+    use anyhow::Result;
+    use async_trait::async_trait;
     use crate::core::price::{HistoricalPeriod, PriceResult};
     use std::collections::HashMap;
 
@@ -257,5 +323,106 @@ mod tests {
         };
 
         assert!(calculate_cagr(&data).is_err());
+    }
+
+    // A mock currency provider that assumes all currencies are 1:1 with target
+    struct MockCurrencyProvider;
+
+    #[async_trait]
+    impl CurrencyRateProvider for MockCurrencyProvider {
+        async fn get_rate(&self, from: &str, to: &str) -> Result<f64> {
+            if from == to {
+                Ok(1.0)
+            } else {
+                Ok(1.0) // Assume 1:1 for simplicity in tests
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_calculate_portfolio_returns_weighted() {
+        let portfolio = Portfolio {
+            name: "Tech".to_string(),
+            investments: vec![
+                Investment::Stock(StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0, // value 1000
+                }),
+                Investment::Stock(StockInvestment {
+                    symbol: "GOOG".to_string(),
+                    units: 20.0, // value 1000
+                }),
+            ],
+        };
+
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "USD".to_string(),
+                short_name: Some("Apple".to_string()),
+                historical_prices: HashMap::from([(HistoricalPeriod::OneYear, 80.0)]), // +25%
+            }),
+        );
+        price_results.insert(
+            "GOOG".to_string(),
+            Ok(PriceResult {
+                price: 50.0,
+                currency: "USD".to_string(),
+                short_name: Some("Google".to_string()),
+                historical_prices: HashMap::from([(HistoricalPeriod::OneYear, 40.0)]), // +25%
+            }),
+        );
+
+        let currency_provider = MockCurrencyProvider;
+        let result =
+            calculate_portfolio_returns(&portfolio, &price_results, &currency_provider, "USD")
+                .await;
+
+        // Each stock has 50% weight. (10*100 = 1000, 20*50 = 1000)
+        // Both have 25% CAGR. Weighted average should be 25%.
+        assert!((result.portfolio_cagrs[&HistoricalPeriod::OneYear] - 25.0).abs() < 0.1);
+    }
+
+    #[tokio::test]
+    async fn test_calculate_portfolio_returns_with_missing_period() {
+        let portfolio = Portfolio {
+            name: "Tech".to_string(),
+            investments: vec![
+                Investment::Stock(StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0, // value 1000 (50% weight)
+                }),
+                Investment::Stock(StockInvestment {
+                    symbol: "GOOG".to_string(),
+                    units: 20.0, // value 1000 (50% weight)
+                }),
+            ],
+        };
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "USD".to_string(),
+                short_name: Some("Apple".to_string()),
+                historical_prices: HashMap::from([(HistoricalPeriod::OneYear, 80.0)]), // +25%
+            }),
+        );
+        price_results.insert(
+            "GOOG".to_string(),
+            Ok(PriceResult {
+                price: 50.0,
+                currency: "USD".to_string(),
+                short_name: Some("Google".to_string()),
+                historical_prices: HashMap::new(),
+            }),
+        );
+        let currency_provider = MockCurrencyProvider;
+        let result =
+            calculate_portfolio_returns(&portfolio, &price_results, &currency_provider, "USD")
+                .await;
+        assert!((result.portfolio_cagrs[&HistoricalPeriod::OneYear] - 25.0).abs() < 0.1);
     }
 }

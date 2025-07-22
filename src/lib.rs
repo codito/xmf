@@ -59,6 +59,7 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
                 &*symbol_provider,
                 &*isin_provider,
                 &*currency_provider,
+                &config.currency,
             )
             .await
         }
