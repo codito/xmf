@@ -8,6 +8,7 @@ use async_trait::async_trait;
 use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::Arc;
+use tracing::error;
 
 #[derive(Debug, Deserialize)]
 struct KuveraResponse {
@@ -55,10 +56,22 @@ impl MetadataProvider for KuveraProvider {
             .await
             .context("Metadata request failed")?;
 
-        let funds: Vec<KuveraResponse> = response
-            .json()
+        let response_text = response
+            .text()
             .await
-            .context("Failed to parse metadata response")?;
+            .context("Failed to get response text")?;
+
+        let funds: Vec<KuveraResponse> = match serde_json::from_str(&response_text) {
+            Ok(data) => data,
+            Err(e) => {
+                error!(
+                    error = ?e,
+                    response = %response_text,
+                    "Failed to parse metadata response"
+                );
+                return Err(e).context("Failed to parse metadata response");
+            }
+        };
 
         let fund = funds.first().ok_or_else(|| anyhow!("Empty funds array"))?;
 
