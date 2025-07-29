@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 struct KuveraResponse {
+    #[serde(rename = "ISIN")]
     isin: String,
     fund_type: String,
     fund_category: String,
