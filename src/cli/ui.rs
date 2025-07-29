@@ -93,3 +93,10 @@ pub fn print_separator() {
         .unwrap_or(80);
     println!("\n{}", "─".repeat(term_width));
 }
+
+/// Formats a percentage value into a styled cell
+pub fn format_percentage_cell(value: f64) -> Cell {
+    Cell::new(format!("{value:.2}%"))
+        .add_attribute(Attribute::Bold)
+        .fg(Color::Green)
+}

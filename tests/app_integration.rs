@@ -36,12 +36,12 @@ mod test_utils {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_currency_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::currency::CurrencyRateProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
@@ -67,6 +67,60 @@ async fn test_real_yahoo_currency_api() {
         Err(e) => {
             error!("Currency rate API request failed: {e}\n{e:?}");
             panic!("Currency rate API request failed: {e}");
+        }
+    }
+}
+
+#[test_log::test(tokio::test)]
+async fn test_real_kuvera_api() {
+    use xmf::core::metadata::MetadataProvider;
+    use xmf::providers::MemoryCache;
+    use xmf::providers::kuvera_provider::KuveraProvider;
+
+    let base_url = "https://mf.captnemo.in";
+    let cache = std::sync::Arc::new(MemoryCache::new());
+    let provider = KuveraProvider::new(base_url, cache);
+
+    // Use same ISIN as unit tests
+    let isin = "INF194K01U07";
+    info!(?isin, "Fetching metadata from Kuvera");
+
+    let result = provider.fetch_metadata(isin).await;
+
+    match result {
+        Ok(metadata) => {
+            info!(?metadata, "Received successful metadata response");
+            assert_eq!(metadata.isin, isin);
+            assert!(
+                !metadata.fund_type.is_empty(),
+                "Fund type should not be empty"
+            );
+            assert!(
+                !metadata.fund_category.is_empty(),
+                "Fund category should not be empty"
+            );
+            assert!(
+                metadata.expense_ratio >= 0.0,
+                "Expense ratio should be non-negative"
+            );
+            assert!(metadata.aum >= 0.0, "AUM should be non-negative");
+            assert!(
+                metadata.fund_rating <= Some(5),
+                "Fund rating should be between 0 and 5"
+            );
+            assert!(
+                !metadata.category.is_empty(),
+                "Category should not be empty"
+            );
+
+            info!(
+                "Real API Response - {}: {:.2}% expense ratio (as of {})",
+                isin, metadata.expense_ratio, metadata.expense_ratio_date
+            );
+        }
+        Err(e) => {
+            error!("API request failed: {e}\n{e:?}");
+            panic!("API request failed: {e}");
         }
     }
 }
@@ -176,12 +230,12 @@ async fn test_full_app_flow_with_mock() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_finance_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::price::PriceProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
@@ -217,12 +271,12 @@ async fn test_real_yahoo_finance_api() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::price::PriceProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests

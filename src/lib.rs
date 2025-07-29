@@ -1,8 +1,10 @@
 pub mod cli;
 pub mod core;
 pub mod providers;
+pub mod store;
 
 use crate::core::PriceResult;
+use crate::core::metadata::FundMetadata;
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -12,6 +14,7 @@ pub enum AppCommand {
     Summary,
     Change,
     Returns,
+    Fees,
 }
 
 /// Common command execution entry point
@@ -25,12 +28,16 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
     debug!("Loaded config: {config:#?}");
 
     // Create shared caches
-    let price_cache = Arc::new(core::cache::Cache::<String, PriceResult>::new());
-    let rate_cache = Arc::new(core::cache::Cache::<String, f64>::new());
+    let price_cache: Arc<dyn core::cache::Cache<String, PriceResult>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, PriceResult>::new());
+    let rate_cache: Arc<dyn core::cache::Cache<String, f64>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, f64>::new());
+    let metadata_cache: Arc<dyn core::cache::Cache<String, FundMetadata>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, FundMetadata>::new());
 
     // Initialize providers
-    let (symbol_provider, isin_provider, currency_provider) =
-        setup_providers(&config, &price_cache, &rate_cache);
+    let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
+        setup_providers(&config, &price_cache, &rate_cache, &metadata_cache);
 
     match command {
         AppCommand::Summary => {
@@ -63,17 +70,30 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
             )
             .await
         }
+        AppCommand::Fees => {
+            cli::fees::run(
+                &config.portfolios,
+                &*symbol_provider,
+                &*isin_provider,
+                &*currency_provider,
+                &*metadata_provider,
+                &config.currency,
+            )
+            .await
+        }
     }
 }
 
 fn setup_providers(
     config: &core::config::AppConfig,
-    price_cache: &Arc<core::cache::Cache<String, PriceResult>>,
-    rate_cache: &Arc<core::cache::Cache<String, f64>>,
+    price_cache: &Arc<dyn core::cache::Cache<String, PriceResult>>,
+    rate_cache: &Arc<dyn core::cache::Cache<String, f64>>,
+    metadata_cache: &Arc<dyn core::cache::Cache<String, FundMetadata>>,
 ) -> (
     Arc<providers::yahoo_finance::YahooFinanceProvider>,
     Arc<providers::amfi_provider::AmfiProvider>,
     Arc<providers::yahoo_finance::YahooCurrencyProvider>,
+    Arc<providers::kuvera_provider::KuveraProvider>,
 ) {
     let yahoo_base = config
         .providers
@@ -99,6 +119,10 @@ fn setup_providers(
         Arc::new(providers::yahoo_finance::YahooCurrencyProvider::new(
             yahoo_base,
             Arc::clone(rate_cache),
+        )),
+        Arc::new(providers::kuvera_provider::KuveraProvider::new(
+            amfi_base,
+            Arc::clone(metadata_cache),
         )),
     )
 }

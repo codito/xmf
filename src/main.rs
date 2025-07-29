@@ -40,6 +40,7 @@ impl From<Commands> for xmf::AppCommand {
             Commands::Summary => xmf::AppCommand::Summary,
             Commands::Change => xmf::AppCommand::Change,
             Commands::Returns => xmf::AppCommand::Returns,
+            Commands::Fees => xmf::AppCommand::Fees,
             Commands::Setup => unreachable!("Setup command should be handled separately"),
         }
     }
@@ -55,6 +56,8 @@ enum Commands {
     Change,
     /// Display CAGR return calculations
     Returns,
+    /// Display expense ratios and fees
+    Fees,
 }
 
 #[tokio::main]

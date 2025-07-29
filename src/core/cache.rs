@@ -1,75 +1,23 @@
-use std::collections::HashMap;
+use async_trait::async_trait;
 use std::hash::Hash;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::debug;
+use std::time::Duration;
 
-#[derive(Clone)]
-pub struct Cache<K, V>
+/// Trait representing a cache with key-based access and TTL support
+#[async_trait]
+pub trait Cache<K, V>: Send + Sync
 where
     K: Eq + Hash + Send + Sync + 'static,
     V: Clone + Send + Sync + 'static,
 {
-    inner: Arc<Mutex<HashMap<K, V>>>,
-}
+    /// Retrieves a value from the cache if present and not expired
+    async fn get(&self, key: &K) -> Option<V>;
 
-impl<K, V> Cache<K, V>
-where
-    K: Eq + Hash + Send + Sync,
-    V: Clone + Send + Sync,
-{
-    pub fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
+    /// Stores a value in cache with specified TTL (None = no expiration)
+    async fn put(&self, key: K, value: V, ttl: Option<Duration>);
 
-    pub async fn get(&self, key: &K) -> Option<V> {
-        let cache = self.inner.lock().await;
-        let value = cache.get(key).cloned();
-        if value.is_some() {
-            debug!("Cache HIT");
-        } else {
-            debug!("Cache MISS");
-        }
-        value
-    }
+    /// Removes an entry from the cache
+    async fn remove(&self, key: &K);
 
-    pub async fn put(&self, key: K, value: V) {
-        let mut cache = self.inner.lock().await;
-        debug!("Cache PUT");
-        cache.insert(key, value);
-    }
-}
-
-impl<K, V> Default for Cache<K, V>
-where
-    K: Eq + Hash + Send + Sync,
-    V: Clone + Send + Sync,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_cache_get_put() {
-        let cache = Cache::<String, i32>::new();
-
-        // Initially, cache is empty
-        assert!(cache.get(&"key1".to_string()).await.is_none());
-
-        // Put a value
-        cache.put("key1".to_string(), 123).await;
-
-        // Get the value
-        assert_eq!(cache.get(&"key1".to_string()).await, Some(123));
-
-        // Get a non-existent key
-        assert!(cache.get(&"key2".to_string()).await.is_none());
-    }
+    /// Clears all entries from the cache
+    async fn clear(&self);
 }

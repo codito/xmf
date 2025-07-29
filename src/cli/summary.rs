@@ -16,7 +16,7 @@ impl PortfolioValue {
         let mut table = ui::new_styled_table();
 
         table.set_header(vec![
-            ui::header_cell("Symbol"),
+            ui::header_cell("Investment"),
             ui::header_cell("Units"),
             ui::header_cell("Price"),
             ui::header_cell(&format!("Value ({target_currency})")),
@@ -30,7 +30,7 @@ impl PortfolioValue {
                 .unwrap_or("N/A")
                 .to_string();
 
-            let symbol_cell_content = if let Some(name) = &investment.short_name {
+            let name_display = if let Some(name) = &investment.short_name {
                 name.clone()
             } else {
                 investment.identifier.clone()
@@ -44,7 +44,7 @@ impl PortfolioValue {
             let weight_pct = ui::format_optional_cell(investment.weight, |w| format!("{w:.2}%"));
 
             table.add_row(vec![
-                Cell::new(symbol_cell_content),
+                Cell::new(name_display),
                 units,
                 current_price,
                 converted_value,
