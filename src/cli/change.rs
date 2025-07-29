@@ -49,7 +49,8 @@ pub async fn run(
     }
 
     // Step 1: Fetch all prices concurrently
-    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
+    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, true);
+    pb.set_message("Fetching prices...");
     let price_futures = investments_to_fetch.iter().map(|(id, provider)| {
         let pb_clone = pb.clone();
         async move {
@@ -191,19 +192,19 @@ fn display_results(result: &PortfolioChangeResult) {
     ];
     periods.sort(); // Ensure consistent order
 
-    let mut header = vec![ui::header_cell("Identifier")];
+    let mut header = vec![ui::header_cell("Investment")];
     for period in &periods {
         header.push(ui::header_cell(&period.to_string()));
     }
     table.set_header(header);
 
     for result in &result.investment_changes {
-        let identifier_cell_content = if let Some(name) = &result.short_name {
+        let name_display = if let Some(name) = &result.short_name {
             name.clone()
         } else {
             result.identifier.clone()
         };
-        let mut row_cells = vec![Cell::new(identifier_cell_content)];
+        let mut row_cells = vec![Cell::new(name_display)];
 
         for period in &periods {
             let cell = match result.changes.get(period) {

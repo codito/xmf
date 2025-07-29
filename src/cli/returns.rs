@@ -55,7 +55,8 @@ pub async fn run(
     }
 
     // Step 1: Fetch all prices concurrently
-    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, false);
+    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, true);
+    pb.set_message("Fetching prices...");
 
     let futures = investments_to_fetch.into_iter().map(|(id, provider)| {
         let pb_clone = pb.clone();
