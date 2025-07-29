@@ -15,7 +15,7 @@ struct KuveraResponse {
     fund_type: String,
     fund_category: String,
     #[serde(rename = "expense_ratio")]
-    expense_ratio_str: String,
+    expense_ratio: String,
     expense_ratio_date: String,
     aum: f64,
     fund_rating: u8,
@@ -70,7 +70,7 @@ impl MetadataProvider for KuveraProvider {
             fund_type: fund.fund_type.clone(),
             fund_category: fund.fund_category.clone(),
             expense_ratio: fund
-                .expense_ratio_str
+                .expense_ratio
                 .parse()
                 .context("Invalid expense_ratio")?,
             expense_ratio_date: Self::parse_api_date(&fund.expense_ratio_date)?,
