@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(meta.expense_ratio_date.year(), 2025);
         assert_eq!(meta.aum, 107715.0);
         assert_eq!(meta.fund_rating, Some(4));
-        assert_eq!(meta.fund_rating_date.unwrap().year(), 2025);
+        assert_eq!(meta.fund_rating_date.as_ref().map(|d| d.year()), Some(2025));
         assert_eq!(meta.category, "Debt - Bonds");
     }
 

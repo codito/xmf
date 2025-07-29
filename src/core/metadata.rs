@@ -9,8 +9,8 @@ pub struct FundMetadata {
     pub expense_ratio: f64,
     pub expense_ratio_date: NaiveDate,
     pub aum: f64,
-    pub fund_rating: u8,
-    pub fund_rating_date: NaiveDate,
+    pub fund_rating: Option<u8>,
+    pub fund_rating_date: Option<NaiveDate>,
     pub category: String,
 }
 
