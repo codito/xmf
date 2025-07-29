@@ -16,7 +16,6 @@ struct KuveraResponse {
     isin: String,
     fund_type: String,
     fund_category: String,
-    #[serde(rename = "expense_ratio")]
     expense_ratio: String,
     expense_ratio_date: String,
     aum: f64,
@@ -123,7 +122,7 @@ mod tests {
     const TEST_ID: &str = "INF109K01R14";
     const MOCK_JSON: &str = r#"[
         {
-            "isin": "INF194K01U07",
+            "ISIN": "INF194K01U07",
             "fund_type": "Debt",
             "fund_category": "Short Duration Fund",
             "expense_ratio": "0.33",
@@ -137,7 +136,7 @@ mod tests {
 
     const MOCK_JSON_NO_RATING: &str = r#"[
         {
-            "isin": "INF194K01U07",
+            "ISIN": "INF194K01U07",
             "fund_type": "Debt",
             "fund_category": "Short Duration Fund",
             "expense_ratio": "0.33",

@@ -1,3 +1,4 @@
+use crate::providers::util::with_retry;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
@@ -135,9 +136,7 @@ impl PriceProvider for YahooFinanceProvider {
         debug!("Requesting price data from {}", url);
 
         let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
-        let response = client
-            .get(&url)
-            .send()
+        let response = with_retry(|| async { client.get(&url).send().await }, 3, 500)
             .await
             .map_err(|e| anyhow!("Request error: {} for symbol: {} URL: {}", e, symbol, url))?;
 
@@ -219,9 +218,7 @@ impl CurrencyRateProvider for YahooCurrencyProvider {
 
         let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
 
-        let response = client
-            .get(&url)
-            .send()
+        let response = with_retry(|| async { client.get(&url).send().await }, 3, 500)
             .await
             .map_err(|e| anyhow!("Request error: {} for currency pair: {}", e, symbol))?;
 
@@ -233,7 +230,10 @@ impl CurrencyRateProvider for YahooCurrencyProvider {
             ));
         }
 
-        let text = response.text().await?;
+        let text = response
+            .text()
+            .await
+            .map_err(|e| anyhow!("Failed to read response text: {}", e))?;
 
         let data: YahooCurrencyResponse = serde_json::from_str(&text)
             .map_err(|e| anyhow!("Failed to parse JSON response for {}: {}", symbol, e))?;

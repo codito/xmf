@@ -10,4 +10,5 @@ pub mod price;
 
 // Re-export main types for cleaner imports
 pub use currency::CurrencyRateProvider;
+pub use metadata::{FundMetadata, MetadataProvider};
 pub use price::{HistoricalPeriod, PriceProvider, PriceResult};

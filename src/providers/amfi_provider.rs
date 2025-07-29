@@ -1,5 +1,6 @@
 use crate::core::cache::Cache;
 use crate::core::{HistoricalPeriod, PriceProvider, PriceResult};
+use crate::providers::util::with_retry;
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono;
@@ -42,9 +43,7 @@ impl PriceProvider for AmfiProvider {
         debug!("Requesting price data from {}", url);
 
         let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
-        let response = client
-            .get(&url)
-            .send()
+        let response = with_retry(|| async { client.get(&url).send().await }, 3, 500)
             .await
             .with_context(|| format!("Failed to send request for ISIN: {identifier}"))?;
 
