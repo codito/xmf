@@ -1,12 +1,11 @@
 use crate::core::cache::{Cache, CacheError};
 use async_trait::async_trait;
-use dirs::cache_dir;
 use serde::{Serialize, de::DeserializeOwned};
 use sled::{Db, Tree};
 use std::hash::Hash;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
 use tracing::debug;
 
 pub struct SledCache<K, V>
@@ -23,19 +22,10 @@ where
     K: Eq + Hash + Send + Sync + Serialize + DeserializeOwned,
     V: Clone + Send + Sync + Serialize + DeserializeOwned,
 {
-    pub fn new(tree_name: &str) -> Result<Self, CacheError> {
-        let cache_path = cache_dir()
-            .ok_or_else(|| {
-                CacheError::IoError(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Cache directory not found",
-                ))
-            })?
-            .join("xmf")
-            .join("cache");
-        std::fs::create_dir_all(&cache_path)?;
+    pub fn new(db_path: &Path, tree_name: &str) -> Result<Self, CacheError> {
+        std::fs::create_dir_all(db_path)?;
 
-        let db = Arc::new(Db::open(cache_path.join("sled_db"))?);
+        let db = Arc::new(Db::open(db_path.join("sled_db"))?);
         let tree = db.open_tree(tree_name)?;
         Ok(Self { db, tree })
     }
@@ -81,11 +71,13 @@ where
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_sled_cache_get_put() {
-        let cache = SledCache::<String, i32>::new("test_tree").unwrap();
+        let db_path = PathBuf::from("test_sled_cache_get_put");
+        let cache = SledCache::<String, i32>::new(&db_path, "test_tree").unwrap();
 
         // Initially, cache is empty
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
@@ -98,11 +90,14 @@ mod tests {
 
         // Get a non-existent key
         assert!(cache.get(&"key2".to_string()).await.unwrap().is_none());
+
+        fs::remove_dir_all(&db_path).unwrap();
     }
 
     #[tokio::test]
     async fn test_sled_cache_ttl_expiration() {
-        let cache = SledCache::<String, i32>::new("test_tree_ttl").unwrap();
+        let db_path = PathBuf::from("test_sled_cache_ttl_expiration");
+        let cache = SledCache::<String, i32>::new(&db_path, "test_tree_ttl").unwrap();
 
         // Put value with 10ms TTL
         cache
@@ -114,22 +109,28 @@ mod tests {
         // Wait for TTL expiration
         sleep(Duration::from_millis(20)).await;
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
+
+        fs::remove_dir_all(&db_path).unwrap();
     }
 
     #[tokio::test]
     async fn test_sled_cache_remove() {
-        let cache = SledCache::<String, i32>::new("test_tree_remove").unwrap();
+        let db_path = PathBuf::from("test_sled_cache_remove");
+        let cache = SledCache::<String, i32>::new(&db_path, "test_tree_remove").unwrap();
 
         cache.put("key1".to_string(), 123, None).await.unwrap();
         assert_eq!(cache.get(&"key1".to_string()).await.unwrap(), Some(123));
 
         cache.remove(&"key1".to_string()).await.unwrap();
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
+
+        fs::remove_dir_all(&db_path).unwrap();
     }
 
     #[tokio::test]
     async fn test_sled_cache_clear() {
-        let cache = SledCache::<String, i32>::new("test_tree_clear").unwrap();
+        let db_path = PathBuf::from("test_sled_cache_clear");
+        let cache = SledCache::<String, i32>::new(&db_path, "test_tree_clear").unwrap();
 
         cache.put("key1".to_string(), 123, None).await.unwrap();
         cache.put("key2".to_string(), 456, None).await.unwrap();
@@ -138,5 +139,7 @@ mod tests {
 
         assert!(cache.get(&"key1".to_string()).await.unwrap().is_none());
         assert!(cache.get(&"key2".to_string()).await.unwrap().is_none());
+
+        fs::remove_dir_all(&db_path).unwrap();
     }
 }
