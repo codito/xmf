@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use chrono::NaiveDate;
 
 #[derive(Debug, Clone)]
@@ -13,6 +14,7 @@ pub struct FundMetadata {
     pub category: String,
 }
 
+#[async_trait]
 pub trait MetadataProvider: Send + Sync {
     async fn fetch_metadata(&self, identifier: &str) -> anyhow::Result<FundMetadata>;
 }

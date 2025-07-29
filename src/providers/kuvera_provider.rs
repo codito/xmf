@@ -50,9 +50,13 @@ impl MetadataProvider for KuveraProvider {
         }
 
         let url = format!("{}/kuvera/{}", self.base_url, identifier);
-        let response = with_retry(|| reqwest::get(&url), 3, 500)
-            .await
-            .context("Metadata request failed")?;
+        let response = with_retry(
+            || async { reqwest::get(&url).await.map_err(anyhow::Error::from) },
+            3,
+            500,
+        )
+        .await
+        .context("Metadata request failed")?;
 
         let funds: Vec<KuveraResponse> = response
             .json()
@@ -88,7 +92,7 @@ mod tests {
     use super::*;
     use chrono::Datelike;
     use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{Mock, ResponseTemplate};
 
     async fn create_mock_server(identifier: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = wiremock::MockServer::start().await;
