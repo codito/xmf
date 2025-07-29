@@ -133,7 +133,7 @@ async fn calculate_portfolio_fees(
         }
 
         total_weight += weight;
-        total_weighted_fee += expense_ratio * weight / 100.0;
+        total_weighted_fee += expense_ratio * weight;
 
         investment_fees.push(FeeResult {
             identifier: holding.identifier.clone(),
@@ -148,7 +148,7 @@ async fn calculate_portfolio_fees(
         name: portfolio.name.clone(),
         investment_fees,
         portfolio_fee: if total_weight > 0.0 {
-            total_weighted_fee / total_weight
+            total_weighted_fee / 100.0
         } else {
             0.0
         },
