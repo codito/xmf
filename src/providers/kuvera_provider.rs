@@ -135,6 +135,20 @@ mod tests {
         }
     ]"#;
 
+    const MOCK_JSON_NO_RATING: &str = r#"[
+        {
+            "isin": "INF194K01U07",
+            "fund_type": "Debt",
+            "fund_category": "Short Duration Fund",
+            "expense_ratio": "0.33",
+            "expense_ratio_date": "2025-06-30",
+            "aum": 107715.0,
+            "fund_rating": null,
+            "fund_rating_date": null,
+            "category": "Debt - Bonds"
+        }
+    ]"#;
+
     #[tokio::test]
     async fn test_fetch_metadata() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
