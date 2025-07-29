@@ -47,16 +47,35 @@ pub async fn run(
             Investment::MutualFund(mf) => Some((mf.isin.clone(), isin_provider)),
             Investment::FixedDeposit(_) => None,
         };
-        provider.map(|(id, provider)| async move {
-            let result = provider.fetch_price(&id).await;
-            (id, result)
-        })
+        provider
     });
 
-    let price_results = join_all(price_futures)
-        .await
-        .into_iter()
-        .collect::<HashMap<_, _>>();
+    let num_price_futures = price_futures.len();
+    let pb_price = if num_price_futures > 0 {
+        let pb = ui::new_progress_bar(num_price_futures as u64, false);
+        Some(pb)
+    } else {
+        None
+    };
+
+    let price_results = if num_price_futures > 0 {
+        let futures = price_futures.into_iter().map(|(id, provider)| {
+            let pb_clone = pb_price.clone().unwrap();
+            async move {
+                let result = provider.fetch_price(&id).await;
+                pb_clone.inc(1);
+                (id, result)
+            }
+        });
+        let results = join_all(futures)
+            .await
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        pb_price.unwrap().finish_and_clear();
+        results
+    } else {
+        HashMap::new()
+    };
 
     // Process each portfolio
     for (i, portfolio) in portfolios.iter().enumerate() {
@@ -75,15 +94,37 @@ pub async fn run(
         }
 
         // Prepare mutual fund metadata fetches
-        let metadata_futures = portfolio.investments.iter().filter_map(|inv| {
+        let investments_to_fetch = portfolio.investments.iter().filter_map(|inv| {
             if let Investment::MutualFund(mf) = inv {
-                Some(async move { metadata_provider.fetch_metadata(&mf.isin).await })
+                Some(mf.isin.as_str())
             } else {
                 None
             }
         });
 
+        let num_metadata = investments_to_fetch.clone().count();
+        let pb_metadata = if num_metadata > 0 {
+            let pb = ui::new_progress_bar(num_metadata as u64, false);
+            Some(pb)
+        } else {
+            None
+        };
+
+        let metadata_futures = investments_to_fetch.map(|isin| {
+            let pb_clone = pb_metadata.clone();
+            async move {
+                let result = metadata_provider.fetch_metadata(isin).await;
+                if let Some(pb) = pb_clone {
+                    pb.inc(1);
+                }
+                result
+            }
+        });
+
         let metadata_results = join_all(metadata_futures).await;
+        if let Some(pb) = pb_metadata {
+            pb.finish_and_clear();
+        }
 
         let result = calculate_portfolio_fees(portfolio, &holdings, &metadata_results).await;
 
