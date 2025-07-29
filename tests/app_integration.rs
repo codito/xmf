@@ -36,12 +36,12 @@ mod test_utils {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_currency_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::currency::CurrencyRateProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
@@ -73,12 +73,12 @@ async fn test_real_yahoo_currency_api() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_kuvera_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::metadata::MetadataProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::kuvera_provider::KuveraProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = KuveraProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
@@ -230,12 +230,12 @@ async fn test_full_app_flow_with_mock() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_finance_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::price::PriceProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
 
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
@@ -271,12 +271,12 @@ async fn test_real_yahoo_finance_api() {
 
 #[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
-    use xmf::core::cache::Cache;
     use xmf::core::price::PriceProvider;
+    use xmf::providers::MemoryCache;
     use xmf::providers::amfi_provider::AmfiProvider;
 
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(Cache::new());
+    let cache = std::sync::Arc::new(MemoryCache::new());
     let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests

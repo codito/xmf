@@ -1,6 +1,7 @@
 pub mod cli;
 pub mod core;
 pub mod providers;
+pub mod store;
 
 use crate::core::PriceResult;
 use crate::core::metadata::FundMetadata;
@@ -27,9 +28,12 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
     debug!("Loaded config: {config:#?}");
 
     // Create shared caches
-    let price_cache = Arc::new(core::cache::Cache::<String, PriceResult>::new());
-    let rate_cache = Arc::new(core::cache::Cache::<String, f64>::new());
-    let metadata_cache = Arc::new(core::cache::Cache::<String, FundMetadata>::new());
+    let price_cache: Arc<dyn core::cache::Cache<String, PriceResult>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, PriceResult>::new());
+    let rate_cache: Arc<dyn core::cache::Cache<String, f64>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, f64>::new());
+    let metadata_cache: Arc<dyn core::cache::Cache<String, FundMetadata>> =
+        Arc::new(crate::store::memory::MemoryCache::<String, FundMetadata>::new());
 
     // Initialize providers
     let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
@@ -82,9 +86,9 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
 
 fn setup_providers(
     config: &core::config::AppConfig,
-    price_cache: &Arc<core::cache::Cache<String, PriceResult>>,
-    rate_cache: &Arc<core::cache::Cache<String, f64>>,
-    metadata_cache: &Arc<core::cache::Cache<String, FundMetadata>>,
+    price_cache: &Arc<dyn core::cache::Cache<String, PriceResult>>,
+    rate_cache: &Arc<dyn core::cache::Cache<String, f64>>,
+    metadata_cache: &Arc<dyn core::cache::Cache<String, FundMetadata>>,
 ) -> (
     Arc<providers::yahoo_finance::YahooFinanceProvider>,
     Arc<providers::amfi_provider::AmfiProvider>,

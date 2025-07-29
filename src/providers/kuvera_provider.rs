@@ -1,13 +1,12 @@
 use super::util::with_retry;
-use crate::core::{
-    cache::Cache,
-    metadata::{FundMetadata, MetadataProvider},
-};
+use crate::core::metadata::{FundMetadata, MetadataProvider};
+use crate::providers::Cache;
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use serde::Deserialize;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::error;
 
 #[derive(Debug, Deserialize)]
@@ -26,11 +25,11 @@ struct KuveraResponse {
 
 pub struct KuveraProvider {
     base_url: String,
-    cache: Arc<Cache<String, FundMetadata>>,
+    cache: Arc<dyn Cache<String, FundMetadata>>,
 }
 
 impl KuveraProvider {
-    pub fn new(base_url: &str, cache: Arc<Cache<String, FundMetadata>>) -> Self {
+    pub fn new(base_url: &str, cache: Arc<dyn Cache<String, FundMetadata>>) -> Self {
         Self {
             base_url: base_url.to_string(),
             cache,
@@ -92,8 +91,13 @@ impl MetadataProvider for KuveraProvider {
             category: fund.category.clone(),
         };
 
+        // Cache with 30 day TTL (metadata changes monthly)
         self.cache
-            .put(identifier.to_string(), metadata.clone())
+            .put(
+                identifier.to_string(),
+                metadata.clone(),
+                Some(Duration::from_secs(30 * 24 * 60 * 60)),
+            )
             .await;
         Ok(metadata)
     }
@@ -102,6 +106,7 @@ impl MetadataProvider for KuveraProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::MemoryCache;
     use chrono::Datelike;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
@@ -151,7 +156,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let cache = Arc::new(MemoryCache::<String, FundMetadata>::new());
         let provider = KuveraProvider::new(&mock_server.uri(), cache);
 
         let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
@@ -170,7 +175,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_without_rating() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON_NO_RATING).await;
-        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let cache = Arc::new(MemoryCache::<String, FundMetadata>::new());
         let provider = KuveraProvider::new(&mock_server.uri(), cache);
 
         let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
@@ -189,7 +194,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_hit() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let cache = Arc::new(MemoryCache::<String, FundMetadata>::new());
         let provider = KuveraProvider::new(&mock_server.uri(), cache);
 
         // First call should hit network
