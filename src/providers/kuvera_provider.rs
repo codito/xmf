@@ -20,8 +20,8 @@ struct KuveraResponse {
     expense_ratio: String,
     expense_ratio_date: String,
     aum: f64,
-    fund_rating: u8,
-    fund_rating_date: String,
+    fund_rating: Option<u8>,          // Changed to Option
+    fund_rating_date: Option<String>, // Changed to Option
     category: String,
 }
 
@@ -86,7 +86,10 @@ impl MetadataProvider for KuveraProvider {
             expense_ratio_date: Self::parse_api_date(&fund.expense_ratio_date)?,
             aum: fund.aum,
             fund_rating: fund.fund_rating,
-            fund_rating_date: Self::parse_api_date(&fund.fund_rating_date)?,
+            fund_rating_date: match &fund.fund_rating_date {
+                Some(date_str) => Some(Self::parse_api_date(date_str)?),
+                None => None,
+            },
             category: fund.category.clone(),
         };
 
@@ -146,7 +149,27 @@ mod tests {
         assert_eq!(meta.expense_ratio, 0.33);
         assert_eq!(meta.expense_ratio_date.year(), 2025);
         assert_eq!(meta.aum, 107715.0);
-        assert_eq!(meta.fund_rating, 4);
+        assert_eq!(meta.fund_rating, Some(4));
+        assert_eq!(meta.fund_rating_date.unwrap().year(), 2025);
+        assert_eq!(meta.category, "Debt - Bonds");
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_without_rating() {
+        let mock_server = create_mock_server(TEST_ID, MOCK_JSON_NO_RATING).await;
+        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let provider = KuveraProvider::new(&mock_server.uri(), cache);
+
+        let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
+
+        assert_eq!(meta.isin, "INF194K01U07");
+        assert_eq!(meta.fund_type, "Debt");
+        assert_eq!(meta.fund_category, "Short Duration Fund");
+        assert_eq!(meta.expense_ratio, 0.33);
+        assert_eq!(meta.expense_ratio_date.year(), 2025);
+        assert_eq!(meta.aum, 107715.0);
+        assert!(meta.fund_rating.is_none());
+        assert!(meta.fund_rating_date.is_none());
         assert_eq!(meta.category, "Debt - Bonds");
     }
 
