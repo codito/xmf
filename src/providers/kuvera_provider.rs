@@ -51,13 +51,9 @@ impl MetadataProvider for KuveraProvider {
         }
 
         let url = format!("{}/kuvera/{}", self.base_url, identifier);
-        let response = with_retry(
-            || async { reqwest::get(&url).await.map_err(anyhow::Error::from) },
-            3,
-            500,
-        )
-        .await
-        .context("Metadata request failed")?;
+        let response = with_retry(|| async { reqwest::get(&url).await }, 3, 500)
+            .await
+            .context("Metadata request failed")?;
 
         let funds: Vec<KuveraResponse> = response
             .json()
