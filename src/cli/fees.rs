@@ -41,16 +41,16 @@ pub async fn run(
     }
 
     // Get current portfolio values for weighting
-    let price_futures = investments_to_process.iter().filter_map(|inv| {
-        let provider = match inv {
+    let price_futures_vec: Vec<_> = investments_to_process
+        .iter()
+        .filter_map(|inv| match inv {
             Investment::Stock(s) => Some((s.symbol.clone(), symbol_provider)),
             Investment::MutualFund(mf) => Some((mf.isin.clone(), isin_provider)),
             Investment::FixedDeposit(_) => None,
-        };
-        provider
-    });
+        })
+        .collect();
 
-    let num_price_futures = price_futures.len();
+    let num_price_futures = price_futures_vec.len();
     let pb_price = if num_price_futures > 0 {
         let pb = ui::new_progress_bar(num_price_futures as u64, false);
         Some(pb)
@@ -59,7 +59,7 @@ pub async fn run(
     };
 
     let price_results = if num_price_futures > 0 {
-        let futures = price_futures.into_iter().map(|(id, provider)| {
+        let futures = price_futures_vec.into_iter().map(|(id, provider)| {
             let pb_clone = pb_price.clone().unwrap();
             async move {
                 let result = provider.fetch_price(&id).await;
