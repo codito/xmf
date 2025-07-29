@@ -29,10 +29,10 @@ pub struct KuveraProvider {
 }
 
 impl KuveraProvider {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(base_url: &str, cache: Arc<Cache<String, FundMetadata>>) -> Self {
         Self {
             base_url: base_url.to_string(),
-            cache: Arc::new(Cache::default()),
+            cache,
         }
     }
 
@@ -96,7 +96,7 @@ mod tests {
 
     async fn create_mock_server(identifier: &str, mock_response: &str) -> wiremock::MockServer {
         let mock_server = wiremock::MockServer::start().await;
-        let request_path = format!("/kuvera/{}", identifier);
+        let request_path = format!("/kuvera/{identifier}");
 
         Mock::given(method("GET"))
             .and(path(request_path))
@@ -125,7 +125,8 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let provider = KuveraProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let provider = KuveraProvider::new(&mock_server.uri(), cache);
 
         let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
 
@@ -142,7 +143,8 @@ mod tests {
     #[tokio::test]
     async fn test_cache_hit() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let provider = KuveraProvider::new(&mock_server.uri());
+        let cache = Arc::new(Cache::<String, FundMetadata>::new());
+        let provider = KuveraProvider::new(&mock_server.uri(), cache);
 
         // First call should hit network
         provider.fetch_metadata(TEST_ID).await.unwrap();
