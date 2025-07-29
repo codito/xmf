@@ -5,6 +5,7 @@ pub mod cache;
 pub mod config;
 pub mod currency;
 pub mod log;
+pub mod metadata;
 pub mod price;
 
 // Re-export main types for cleaner imports
