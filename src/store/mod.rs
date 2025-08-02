@@ -3,8 +3,7 @@ pub mod memory;
 
 use crate::core::cache::{KeyValueCollection, Store};
 use crate::core::config::AppConfig;
-use disk::DiskCollection;
-use fjall::{Keyspace, PartitionCreateOptions};
+use disk::{DiskCollection, DiskStore};
 use memory::MemoryCollection;
 use std::{
     any::Any,
@@ -15,32 +14,33 @@ use std::{
 /// A thread-safe key-value store that can hold multiple collections.
 pub struct KeyValueStore {
     collections: RwLock<HashMap<String, Arc<dyn Any + Send + Sync>>>,
-    keyspace: Option<Arc<Keyspace>>,
+    disk_store: Option<DiskStore>,
 }
 
 impl KeyValueStore {
     #[cfg(test)]
     pub(crate) fn new_for_test(path: &std::path::Path) -> Self {
-        let keyspace = fjall::Config::new(path).open().ok().map(Arc::new);
-
         Self {
             collections: RwLock::new(HashMap::new()),
-            keyspace,
+            disk_store: DiskStore::new(path).ok(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn persist(&self) {
+        if let Some(ds) = &self.disk_store {
+            ds.persist().unwrap();
         }
     }
 
     pub fn new() -> Self {
-        let keyspace = AppConfig::default_data_path()
+        let disk_store = AppConfig::default_data_path()
             .ok()
-            .and_then(|path| {
-                let cache_dir = path.join("cache");
-                fjall::Config::new(cache_dir).open().ok()
-            })
-            .map(Arc::new);
+            .and_then(|path| DiskStore::new(&path.join("cache")).ok());
 
         Self {
             collections: RwLock::new(HashMap::new()),
-            keyspace,
+            disk_store,
         }
     }
 }
@@ -62,14 +62,10 @@ impl Store for KeyValueStore {
             let mut collections = self.collections.write().unwrap();
             if !collections.contains_key(name) {
                 let new_collection: Option<Arc<dyn Any + Send + Sync>> = if persist {
-                    self.keyspace.as_ref().and_then(|ks| {
-                        ks.open_partition(name, PartitionCreateOptions::default())
-                            .ok()
-                            .map(|partition| {
-                                Arc::new(DiskCollection::new(partition))
-                                    as Arc<dyn Any + Send + Sync>
-                            })
-                    })
+                    self.disk_store
+                        .as_ref()
+                        .and_then(|ds| ds.get_collection(name).ok())
+                        .map(|collection| Arc::new(collection) as Arc<dyn Any + Send + Sync>)
                 } else {
                     Some(Arc::new(MemoryCollection::new()))
                 };

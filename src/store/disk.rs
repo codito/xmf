@@ -1,7 +1,7 @@
 use crate::core::cache::KeyValueCollection;
 use anyhow::Result;
 use async_trait::async_trait;
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
+use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle, PersistMode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -28,6 +28,11 @@ impl DiskStore {
             self.keyspace
                 .open_partition(name, PartitionCreateOptions::default())?,
         ))
+    }
+
+    pub fn persist(&self) -> Result<()> {
+        self.keyspace.persist(PersistMode::SyncAll)?;
+        Ok(())
     }
 }
 

@@ -74,38 +74,51 @@ mod tests {
     use super::*;
     use crate::core::cache::Store;
     use crate::store::KeyValueStore;
+    use tempfile::tempdir;
     use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_cache_get_collection() {
-        let cache = KeyValueStore::new();
+        let dir = tempdir().unwrap();
+        let cache = KeyValueStore::new_for_test(dir.path());
 
         // Test getting a non-existent collection
-        let collection = cache.get_collection("test", false, false);
-        assert!(collection.is_none());
+        assert!(cache.get_collection("test", false, false).is_none());
 
-        // Test getting a non-existent collection with create_if_missing = true
-        let collection = cache.get_collection("test", true, true);
-        assert!(collection.is_some());
+        // Test creating and getting a memory-backed collection
+        let mem_collection = cache.get_collection("test_mem", false, true).unwrap();
+        mem_collection.put(b"mem_key", b"mem_val", None).await;
+        assert_eq!(
+            mem_collection.get(b"mem_key").await,
+            Some(b"mem_val".to_vec())
+        );
+
+        // Test creating and getting a disk-backed collection
+        let disk_collection = cache.get_collection("test_disk", true, true).unwrap();
+        disk_collection.put(b"disk_key", b"disk_val", None).await;
+        assert_eq!(
+            disk_collection.get(b"disk_key").await,
+            Some(b"disk_val".to_vec())
+        );
 
         // Test getting an existing collection
-        let collection = cache.get_collection("test", false, false);
-        assert!(collection.is_some());
+        assert!(cache.get_collection("test_mem", false, false).is_some());
+        assert!(cache.get_collection("test_disk", true, false).is_some());
     }
 
     #[tokio::test]
     async fn test_cache_remove_collection() {
-        let cache = KeyValueStore::new();
+        let dir = tempdir().unwrap();
+        let cache = KeyValueStore::new_for_test(dir.path());
 
         // Create a collection
-        cache.get_collection("test", true, true);
+        assert!(cache.get_collection("test", true, true).is_some());
 
         // Remove the collection
         assert!(cache.remove_collection("test"));
 
         // Verify the collection is removed
-        let collection = cache.get_collection("test", false, false);
-        assert!(collection.is_none());
+        assert!(cache.get_collection("test", false, false).is_none());
 
         // Try to remove a non-existent collection
         assert!(!cache.remove_collection("nonexistent"));
@@ -186,5 +199,28 @@ mod tests {
 
         assert!(cache.get("key1".as_bytes()).await.is_none());
         assert!(cache.get("key2".as_bytes()).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_disk_collection_persistence() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+
+        // Create a store, add a value to a disk collection
+        {
+            let store = KeyValueStore::new_for_test(&path);
+            let collection = store.get_collection("persist_test", true, true).unwrap();
+            collection.put(b"mykey", b"myvalue", None).await;
+
+            // Ensure data is flushed to disk
+            store.persist();
+        }
+
+        // Create another store instance with the same path
+        let store2 = KeyValueStore::new_for_test(&path);
+        let collection2 = store2.get_collection("persist_test", true, true).unwrap();
+        let value = collection2.get(b"mykey").await;
+
+        assert_eq!(value, Some(b"myvalue".to_vec()));
     }
 }
