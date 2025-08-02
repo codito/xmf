@@ -307,8 +307,8 @@ mod tests {
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = AmfiProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = AmfiProvider::new_with_collection(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
 
         // 1D, 5D will use the closest data >1 month old.
