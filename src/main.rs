@@ -10,6 +10,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Force refresh of cached data
+    #[arg(long, global = true)]
+    force_refresh: bool,
+
     /// Path to custom configuration file (overrides default config search)
     #[arg(
         short,
@@ -65,6 +69,19 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     init_logging(cli.verbose);
+
+    if cli.force_refresh {
+        if let Ok(path) = xmf::core::config::AppConfig::default_data_path() {
+            let cache_path = path.join("cache");
+            if cache_path.exists() {
+                tracing::info!(
+                    "--force-refresh: clearing cache at {}",
+                    cache_path.display()
+                );
+                std::fs::remove_dir_all(&cache_path)?;
+            }
+        }
+    }
 
     let config_arg =
         if let Some(name) = &cli.config_name {
