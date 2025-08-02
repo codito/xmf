@@ -216,4 +216,42 @@ mod tests {
         assert!(cache.get("key1".as_bytes()).await.is_none());
         assert!(cache.get("key2".as_bytes()).await.is_none());
     }
+
+    #[tokio::test]
+    async fn test_disk_store_persist() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+
+        // Create store, add data, and persist
+        {
+            let store = DiskStore::new(&path).unwrap();
+            let collection = store.get_collection("test").unwrap();
+            collection.put(b"key1", b"value1", None).await;
+            store.persist().unwrap();
+        }
+
+        // Re-open store and check if data is still there
+        {
+            let store = DiskStore::new(&path).unwrap();
+            let collection = store.get_collection("test").unwrap();
+            assert_eq!(collection.get(b"key1").await, Some(b"value1".to_vec()));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_disk_store_clear() {
+        let dir = tempdir().unwrap();
+        let store = DiskStore::new(dir.path()).unwrap();
+
+        // Create a few collections and add data
+        let collection1 = store.get_collection("test1").unwrap();
+        collection1.put(b"key1", b"value1", None).await;
+
+        let collection2 = store.get_collection("test2").unwrap();
+        collection2.put(b"key2", b"value2", None).await;
+
+        assert_eq!(store.keyspace.list_partitions().len(), 2);
+        store.clear().unwrap();
+        assert_eq!(store.keyspace.list_partitions().len(), 0);
+    }
 }
