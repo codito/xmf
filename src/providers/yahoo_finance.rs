@@ -82,6 +82,14 @@ impl YahooFinanceProvider {
             cache: collection,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_collection(base_url: &str, cache: Arc<dyn KeyValueCollection>) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            cache,
+        }
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -196,6 +204,14 @@ impl YahooCurrencyProvider {
             cache: collection,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_collection(base_url: &str, cache: Arc<dyn KeyValueCollection>) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            cache,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -275,7 +291,7 @@ impl CurrencyRateProvider for YahooCurrencyProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::KeyValueStore;
+    use crate::store::memory::MemoryCollection;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -308,9 +324,9 @@ mod tests {
         }"#;
 
         let mock_server = create_mock_server("AAPL", mock_response).await;
-        let cache = Arc::new(KeyValueStore::new());
+        let cache = Arc::new(MemoryCollection::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
         let result = provider.fetch_price("AAPL").await.unwrap();
         assert_eq!(result.price, 150.65);
         assert_eq!(result.currency, "USD");
@@ -352,9 +368,9 @@ mod tests {
         );
 
         let mock_server = create_mock_server("AAPL", &mock_response).await;
-        let cache = Arc::new(KeyValueStore::new());
+        let cache = Arc::new(MemoryCollection::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
         let result = provider.fetch_price("AAPL").await.unwrap();
 
         assert_eq!(result.price, current_price);
@@ -428,9 +444,9 @@ mod tests {
     async fn test_no_price_result_data() {
         let mock_response = r#"{"chart": {"result": []}}"#;
         let mock_server = create_mock_server("INVALID", mock_response).await;
-        let cache = Arc::new(KeyValueStore::new());
+        let cache = Arc::new(MemoryCollection::new());
 
-        let provider = YahooFinanceProvider::new(&mock_server.uri(), cache);
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
         let result = provider.fetch_price("INVALID").await;
         assert!(result.is_err());
         assert_eq!(
@@ -443,8 +459,8 @@ mod tests {
     #[tokio::test]
     async fn test_successful_rate_fetch() {
         let mock_server = MockServer::start().await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooCurrencyProvider::new_with_collection(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {
@@ -475,8 +491,8 @@ mod tests {
     #[tokio::test]
     async fn test_no_currency_rate_found() {
         let mock_server = MockServer::start().await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooCurrencyProvider::new_with_collection(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {
@@ -502,8 +518,8 @@ mod tests {
     #[tokio::test]
     async fn test_yahoo_currency_api_error_response() {
         let mock_server = MockServer::start().await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooCurrencyProvider::new_with_collection(&mock_server.uri(), cache);
 
         let expected_endpoint = "/v8/finance/chart/USDEUR=X";
         Mock::given(method("GET"))
@@ -523,8 +539,8 @@ mod tests {
     #[tokio::test]
     async fn test_yahoo_currency_api_malformed_response() {
         let mock_server = MockServer::start().await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = YahooCurrencyProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooCurrencyProvider::new_with_collection(&mock_server.uri(), cache);
 
         let mock_response = r#"{
             "chart": {

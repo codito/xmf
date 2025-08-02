@@ -44,6 +44,14 @@ impl KuveraProvider {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn new_with_collection(base_url: &str, cache: Arc<dyn KeyValueCollection>) -> Self {
+        Self {
+            base_url: base_url.to_string(),
+            cache,
+        }
+    }
+
     fn parse_api_date(date_str: &str) -> anyhow::Result<NaiveDate> {
         NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
             .with_context(|| format!("Failed to parse date: {date_str}"))
@@ -114,7 +122,7 @@ impl MetadataProvider for KuveraProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::KeyValueStore;
+    use crate::store::memory::MemoryCollection;
     use chrono::Datelike;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, ResponseTemplate};
@@ -164,8 +172,8 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = KuveraProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = KuveraProvider::new_with_collection(&mock_server.uri(), cache);
 
         let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
 
@@ -183,8 +191,8 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_without_rating() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON_NO_RATING).await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = KuveraProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = KuveraProvider::new_with_collection(&mock_server.uri(), cache);
 
         let meta = provider.fetch_metadata(TEST_ID).await.unwrap();
 
@@ -202,8 +210,8 @@ mod tests {
     #[tokio::test]
     async fn test_cache_hit() {
         let mock_server = create_mock_server(TEST_ID, MOCK_JSON).await;
-        let cache = Arc::new(KeyValueStore::new());
-        let provider = KuveraProvider::new(&mock_server.uri(), cache);
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = KuveraProvider::new_with_collection(&mock_server.uri(), cache);
 
         // First call should hit network
         provider.fetch_metadata(TEST_ID).await.unwrap();
