@@ -80,7 +80,6 @@ impl KeyValueCollection for DiskCollection {
         let res: Result<()> = (|| {
             let keys: Vec<_> = self
                 .partition
-                .iter()
                 .keys()
                 .collect::<std::result::Result<_, _>>()?;
             for key in keys {
@@ -99,6 +98,7 @@ impl KeyValueCollection for DiskCollection {
 mod tests {
     use super::*;
     use fjall::{Config, Keyspace, PartitionCreateOptions};
+    use std::sync::Arc;
     use tempfile::tempdir;
     use tokio::time::sleep;
 
