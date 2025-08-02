@@ -3,8 +3,7 @@ pub mod core;
 pub mod providers;
 pub mod store;
 
-use crate::core::PriceResult;
-use crate::core::metadata::FundMetadata;
+use crate::store::KeyValueStore;
 use anyhow::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
@@ -28,16 +27,11 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
     debug!("Loaded config: {config:#?}");
 
     // Create shared caches
-    let price_cache: Arc<dyn core::cache::Cache<String, PriceResult>> =
-        Arc::new(crate::store::memory::MemoryCache::<String, PriceResult>::new());
-    let rate_cache: Arc<dyn core::cache::Cache<String, f64>> =
-        Arc::new(crate::store::memory::MemoryCache::<String, f64>::new());
-    let metadata_cache: Arc<dyn core::cache::Cache<String, FundMetadata>> =
-        Arc::new(crate::store::memory::MemoryCache::<String, FundMetadata>::new());
+    let store = Arc::new(KeyValueStore::new());
 
     // Initialize providers
     let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
-        setup_providers(&config, &price_cache, &rate_cache, &metadata_cache);
+        setup_providers(&config, &store);
 
     match command {
         AppCommand::Summary => {
@@ -86,9 +80,7 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
 
 fn setup_providers(
     config: &core::config::AppConfig,
-    price_cache: &Arc<dyn core::cache::Cache<String, PriceResult>>,
-    rate_cache: &Arc<dyn core::cache::Cache<String, f64>>,
-    metadata_cache: &Arc<dyn core::cache::Cache<String, FundMetadata>>,
+    store: &Arc<KeyValueStore>,
 ) -> (
     Arc<providers::yahoo_finance::YahooFinanceProvider>,
     Arc<providers::amfi_provider::AmfiProvider>,
@@ -110,19 +102,19 @@ fn setup_providers(
     (
         Arc::new(providers::yahoo_finance::YahooFinanceProvider::new(
             yahoo_base,
-            Arc::clone(price_cache),
+            Arc::clone(store),
         )),
         Arc::new(providers::amfi_provider::AmfiProvider::new(
             amfi_base,
-            Arc::clone(price_cache),
+            Arc::clone(store),
         )),
         Arc::new(providers::yahoo_finance::YahooCurrencyProvider::new(
             yahoo_base,
-            Arc::clone(rate_cache),
+            Arc::clone(store),
         )),
         Arc::new(providers::kuvera_provider::KuveraProvider::new(
             amfi_base,
-            Arc::clone(metadata_cache),
+            Arc::clone(store),
         )),
     )
 }

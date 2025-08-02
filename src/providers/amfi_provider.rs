@@ -1,6 +1,7 @@
+use crate::core::cache::{KeyValueCollection, Store};
 use crate::core::{HistoricalPeriod, PriceProvider, PriceResult};
-use crate::providers::Cache;
 use crate::providers::util::with_retry;
+use crate::store::KeyValueStore;
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use chrono;
@@ -12,14 +13,15 @@ use tracing::debug;
 
 pub struct AmfiProvider {
     base_url: String,
-    cache: Arc<dyn Cache<String, PriceResult>>,
+    cache: Arc<dyn KeyValueCollection>,
 }
 
 impl AmfiProvider {
-    pub fn new(base_url: &str, cache: Arc<dyn Cache<String, PriceResult>>) -> Self {
+    pub fn new(base_url: &str, cache: Arc<KeyValueStore>) -> Self {
+        let collection = cache.get_collection("amfi", true, true).unwrap();
         AmfiProvider {
             base_url: base_url.to_string(),
-            cache,
+            cache: collection,
         }
     }
 }
@@ -36,8 +38,8 @@ struct AmfiResponse {
 #[async_trait]
 impl PriceProvider for AmfiProvider {
     async fn fetch_price(&self, identifier: &str) -> Result<PriceResult> {
-        if let Some(cached) = self.cache.get(&identifier.to_string()).await {
-            return Ok(cached);
+        if let Some(cached) = self.cache.get(identifier.as_bytes()).await {
+            return Ok(serde_json::from_slice(&cached)?);
         }
 
         let url = format!("{}/nav/{}", self.base_url, identifier);
@@ -131,8 +133,8 @@ impl PriceProvider for AmfiProvider {
         // Cache with 1 day TTL (mutual funds change daily)
         self.cache
             .put(
-                identifier.to_string(),
-                result.clone(),
+                identifier.as_bytes(),
+                &serde_json::to_vec(&result).unwrap(),
                 Some(Duration::from_secs(24 * 60 * 60)),
             )
             .await;
@@ -144,7 +146,7 @@ impl PriceProvider for AmfiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::MemoryCache;
+    use crate::store::KeyValueStore;
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -170,7 +172,7 @@ mod tests {
         let isin = "INF789F01XA0";
         let mock_response = r#"{"nav": 123.45, "date": "2024-01-01", "name": "My Fund"}"#;
         let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
 
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
@@ -210,7 +212,7 @@ mod tests {
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
 
@@ -297,7 +299,7 @@ mod tests {
         );
 
         let mock_server = create_amfi_mock_server(isin, &mock_response, 200).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await.unwrap();
 
@@ -351,7 +353,7 @@ mod tests {
     async fn test_amfi_api_error_response() {
         let isin = "INF789F01XA0";
         let mock_server = create_amfi_mock_server(isin, "Server Error", 500).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
 
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await;
@@ -366,7 +368,7 @@ mod tests {
         let isin = "INF789F01XA0";
         let mock_response = r#"{ "not_nav": "abc" }"#; // Malformed JSON for AmfiResponse
         let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
 
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await;
@@ -383,7 +385,7 @@ mod tests {
         let isin = "INF789F01XA0";
         let mock_response = r#""#; // Empty response string
         let mock_server = create_amfi_mock_server(isin, mock_response, 200).await;
-        let cache = Arc::new(MemoryCache::new());
+        let cache = Arc::new(KeyValueStore::new());
 
         let provider = AmfiProvider::new(&mock_server.uri(), cache);
         let result = provider.fetch_price(isin).await;

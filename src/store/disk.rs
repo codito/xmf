@@ -1,8 +1,10 @@
-use crate::core::cache::Cache;
+use crate::core::cache::{Cache, KeyValueCollection};
 use anyhow::Result;
 use async_trait::async_trait;
 use fjall::{Config, Database};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::any::Any;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -17,7 +19,7 @@ struct CacheEntry<V> {
     expires_at: Option<SystemTime>,
 }
 
-pub struct FjallCache<K, V>
+pub struct FjallCollection<K, V>
 where
     K: Eq + Hash + Send + Sync + Serialize + DeserializeOwned + 'static + Debug,
     V: Clone + Send + Sync + Serialize + DeserializeOwned + 'static,
@@ -26,7 +28,7 @@ where
     _marker: PhantomData<(K, V)>,
 }
 
-impl<K, V> FjallCache<K, V>
+impl<K, V> FjallCollection<K, V>
 where
     K: Eq + Hash + Send + Sync + Serialize + DeserializeOwned + Debug,
     V: Clone + Send + Sync + Serialize + DeserializeOwned,
@@ -43,7 +45,7 @@ where
 }
 
 #[async_trait]
-impl<K, V> Cache<K, V> for FjallCache<K, V>
+impl<K, V> KeyValueCollection<K, V> for FjallCollection<K, V>
 where
     K: Eq + Hash + Send + Sync + Serialize + DeserializeOwned + 'static + Debug,
     V: Clone + Send + Sync + Serialize + DeserializeOwned + 'static,
@@ -69,7 +71,7 @@ where
         match res {
             Ok(val) => val,
             Err(e) => {
-                debug!("FjallCache get error: {}", e);
+                debug!("FjallCollection get error: {}", e);
                 None
             }
         }
@@ -85,20 +87,20 @@ where
             Ok(())
         })();
         if let Err(e) = res {
-            debug!("FjallCache put error: {}", e);
+            debug!("FjallCollection put error: {}", e);
         }
     }
 
     async fn remove(&self, key: &K) {
         let res: Result<()> = (|| Ok(self.db.remove(serde_json::to_vec(key)?)?))();
         if let Err(e) = res {
-            debug!("FjallCache remove error: {}", e);
+            debug!("FjallCollection remove error: {}", e);
         }
     }
 
     async fn clear(&self) {
         if let Err(e) = self.db.clear() {
-            debug!("FjallCache clear error: {}", e)
+            debug!("FjallCollection clear error: {}", e)
         }
     }
 }
@@ -112,7 +114,7 @@ mod tests {
     #[tokio::test]
     async fn test_fjall_cache_get_put() {
         let dir = tempdir().unwrap();
-        let cache = FjallCache::<String, i32>::new(dir.path()).unwrap();
+        let cache = FjallCollection::<String, i32>::new(dir.path()).unwrap();
 
         // Initially, cache is empty
         assert!(cache.get(&"key1".to_string()).await.is_none());
@@ -130,7 +132,7 @@ mod tests {
     #[tokio::test]
     async fn test_fjall_cache_ttl_expiration() {
         let dir = tempdir().unwrap();
-        let cache = FjallCache::<String, i32>::new(dir.path()).unwrap();
+        let cache = FjallCollection::<String, i32>::new(dir.path()).unwrap();
 
         // Put value with 10ms TTL
         cache
@@ -146,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn test_fjall_cache_remove() {
         let dir = tempdir().unwrap();
-        let cache = FjallCache::<String, i32>::new(dir.path()).unwrap();
+        let cache = FjallCollection::<String, i32>::new(dir.path()).unwrap();
 
         cache.put("key1".to_string(), 123, None).await;
         assert_eq!(cache.get(&"key1".to_string()).await, Some(123));
@@ -158,7 +160,7 @@ mod tests {
     #[tokio::test]
     async fn test_fjall_cache_clear() {
         let dir = tempdir().unwrap();
-        let cache = FjallCache::<String, i32>::new(dir.path()).unwrap();
+        let cache = FjallCollection::<String, i32>::new(dir.path()).unwrap();
 
         cache.put("key1".to_string(), 123, None).await;
         cache.put("key2".to_string(), 456, None).await;

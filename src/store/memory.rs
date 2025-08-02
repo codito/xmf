@@ -1,11 +1,8 @@
-use crate::core::cache::Cache;
+use crate::core::cache::KeyValueCollection;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::hash::Hash;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
-use tracing::debug;
+use tokio::sync::RwLock;
 
 struct CacheValue<V> {
     value: V,
@@ -13,141 +10,181 @@ struct CacheValue<V> {
 }
 
 /// In-memory cache implementation using HashMap and RwLock
-pub struct MemoryCache<K, V>
-where
-    K: Eq + Hash + Send + Sync + 'static,
-    V: Clone + Send + Sync + 'static,
-{
-    inner: Arc<Mutex<HashMap<K, CacheValue<V>>>>,
+pub struct MemoryCollection {
+    inner: RwLock<HashMap<Vec<u8>, CacheValue<Vec<u8>>>>,
 }
 
-impl<K, V> MemoryCache<K, V>
-where
-    K: Eq + Hash + Send + Sync,
-    V: Clone + Send + Sync,
-{
+// ---- MemoryCollection implementation ----
+impl MemoryCollection {
     /// Creates a new MemoryCache instance
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(HashMap::new())),
+            inner: RwLock::new(HashMap::new()),
         }
     }
 }
 
-impl<K, V> Default for MemoryCache<K, V>
-where
-    K: Eq + Hash + Send + Sync,
-    V: Clone + Send + Sync,
-{
-    /// Creates a new MemoryCache instance with default settings
+impl Default for MemoryCollection {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl<K, V> Cache<K, V> for MemoryCache<K, V>
-where
-    K: Eq + Hash + Send + Sync + std::fmt::Debug + 'static,
-    V: Clone + Send + Sync + 'static,
-{
-    async fn get(&self, key: &K) -> Option<V> {
-        let cache = self.inner.lock().await;
+impl KeyValueCollection for MemoryCollection {
+    async fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
+        let cache = self.inner.read().await;
         if let Some(entry) = cache.get(key) {
             // Check if entry has expired
             if let Some(expiry) = entry.expires_at {
                 if expiry < Instant::now() {
-                    debug!("Cache entry expired for key: {:?}", key);
                     return None;
                 }
             }
-            debug!("Cache HIT for key: {:?}", key);
             return Some(entry.value.clone());
         }
-        debug!("Cache MISS for key: {:?}", key);
+
         None
     }
 
-    async fn put(&self, key: K, value: V, ttl: Option<Duration>) {
+    async fn put(&self, key: &[u8], value: &[u8], ttl: Option<Duration>) {
         let expires_at = ttl.map(|duration| Instant::now() + duration);
-        let cache_value = CacheValue { value, expires_at };
+        let cache_value = CacheValue {
+            value: value.into(),
+            expires_at,
+        };
 
-        let mut cache = self.inner.lock().await;
-        debug!("Cache PUT for key: {:?}", key);
-        cache.insert(key, cache_value);
+        let mut cache = self.inner.write().await;
+        cache.insert(key.into(), cache_value);
     }
 
-    async fn remove(&self, key: &K) {
-        let mut cache = self.inner.lock().await;
+    async fn remove(&self, key: &[u8]) {
+        let mut cache = self.inner.write().await;
         cache.remove(key);
-        debug!("Cache REMOVE for key: {:?}", key);
     }
 
     async fn clear(&self) {
-        let mut cache = self.inner.lock().await;
+        let mut cache = self.inner.write().await;
         cache.clear();
-        debug!("Cache CLEAR");
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::cache::Store;
+    use crate::store::KeyValueStore;
     use tokio::time::sleep;
 
     #[tokio::test]
-    async fn test_cache_get_put() {
-        let cache = MemoryCache::<String, i32>::new();
+    async fn test_cache_get_collection() {
+        let cache = KeyValueStore::new();
 
-        // Initially, cache is empty
-        assert!(cache.get(&"key1".to_string()).await.is_none());
+        // Test getting a non-existent collection
+        let collection = cache.get_collection("test", false, false);
+        assert!(collection.is_none());
 
-        // Put a value without TTL
-        cache.put("key1".to_string(), 123, None).await;
+        // Test getting a non-existent collection with create_if_missing = true
+        let collection = cache.get_collection("test", true, true);
+        assert!(collection.is_some());
 
-        // Get the value
-        assert_eq!(cache.get(&"key1".to_string()).await, Some(123));
-
-        // Get a non-existent key
-        assert!(cache.get(&"key2".to_string()).await.is_none());
+        // Test getting an existing collection
+        let collection = cache.get_collection("test", false, false);
+        assert!(collection.is_some());
     }
 
     #[tokio::test]
-    async fn test_cache_ttl_expiration() {
-        let cache = MemoryCache::<String, i32>::new();
+    async fn test_cache_remove_collection() {
+        let cache = KeyValueStore::new();
+
+        // Create a collection
+        cache.get_collection("test", true, true);
+
+        // Remove the collection
+        assert!(cache.remove_collection("test"));
+
+        // Verify the collection is removed
+        let collection = cache.get_collection("test", false, false);
+        assert!(collection.is_none());
+
+        // Try to remove a non-existent collection
+        assert!(!cache.remove_collection("nonexistent"));
+    }
+
+    #[tokio::test]
+    async fn test_collection_get_put() {
+        let cache = MemoryCollection::new();
+
+        // Initially, cache is empty
+        assert!(cache.get("key1".as_bytes()).await.is_none());
+
+        // Put a value without TTL
+        cache
+            .put("key1".as_bytes(), &123i32.to_be_bytes(), None)
+            .await;
+
+        // Get the value
+        assert_eq!(
+            cache.get("key1".as_bytes()).await,
+            Some(123i32.to_be_bytes().to_vec())
+        );
+
+        // Get a non-existent key
+        assert!(cache.get("key2".as_bytes()).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_collection_ttl_expiration() {
+        let cache = MemoryCollection::new();
 
         // Put value with 10ms TTL
         cache
-            .put("key1".to_string(), 123, Some(Duration::from_millis(10)))
+            .put(
+                "key1".as_bytes(),
+                &123u32.to_be_bytes(),
+                Some(Duration::from_millis(10)),
+            )
             .await;
-        assert_eq!(cache.get(&"key1".to_string()).await, Some(123));
+        assert_eq!(
+            cache.get("key1".as_bytes()).await,
+            Some(123u32.to_be_bytes().to_vec())
+        );
 
         // Wait for TTL expiration
         sleep(Duration::from_millis(20)).await;
-        assert!(cache.get(&"key1".to_string()).await.is_none());
+        assert!(cache.get("key1".as_bytes()).await.is_none());
     }
 
     #[tokio::test]
-    async fn test_cache_remove() {
-        let cache = MemoryCache::<String, i32>::new();
+    async fn test_collection_remove() {
+        let cache = MemoryCollection::new();
 
-        cache.put("key1".to_string(), 123, None).await;
-        assert_eq!(cache.get(&"key1".to_string()).await, Some(123));
+        cache
+            .put("key1".as_bytes(), &123u32.to_be_bytes(), None)
+            .await;
+        assert_eq!(
+            cache.get("key1".as_bytes()).await,
+            Some(123u32.to_be_bytes().to_vec())
+        );
 
-        cache.remove(&"key1".to_string()).await;
-        assert!(cache.get(&"key1".to_string()).await.is_none());
+        cache.remove("key1".as_bytes()).await;
+        assert!(cache.get("key1".as_bytes()).await.is_none());
     }
 
     #[tokio::test]
-    async fn test_cache_clear() {
-        let cache = MemoryCache::<String, i32>::new();
+    async fn test_collection_clear() {
+        let cache = MemoryCollection::new();
 
-        cache.put("key1".to_string(), 123, None).await;
-        cache.put("key2".to_string(), 456, None).await;
+        cache
+            .put("key1".as_bytes(), &123u32.to_be_bytes(), None)
+            .await;
+        cache
+            .put("key2".as_bytes(), &456u32.to_be_bytes(), None)
+            .await;
 
         cache.clear().await;
 
-        assert!(cache.get(&"key1".to_string()).await.is_none());
-        assert!(cache.get(&"key2".to_string()).await.is_none());
+        assert!(cache.get("key1".as_bytes()).await.is_none());
+        assert!(cache.get("key2".as_bytes()).await.is_none());
     }
 }
