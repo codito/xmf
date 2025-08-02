@@ -156,7 +156,7 @@ async fn test_full_app_flow_with_amfi_mock() {
     fs::write(config_path, &config_content).expect("Failed to write config file");
 
     // Run app and verify success
-    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path)).await;
+    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path), false).await;
     assert!(
         result.is_ok(),
         "Main function failed with: {:?}",
@@ -220,7 +220,7 @@ async fn test_full_app_flow_with_mock() {
     fs::write(config_path, &config_content).expect("Failed to write config file");
 
     // Run app and verify success
-    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path)).await;
+    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path), false).await;
     assert!(
         result.is_ok(),
         "Main function failed with: {:?}",

@@ -34,6 +34,16 @@ impl DiskStore {
         self.keyspace.persist(PersistMode::SyncAll)?;
         Ok(())
     }
+
+    pub fn clear(&self) -> Result<()> {
+        for partition_name in self.keyspace.list_partitions() {
+            let partition = self
+                .keyspace
+                .open_partition(&partition_name, PartitionCreateOptions::default())?;
+            self.keyspace.delete_partition(partition)?;
+        }
+        Ok(())
+    }
 }
 
 pub struct DiskCollection {

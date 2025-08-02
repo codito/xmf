@@ -24,7 +24,6 @@ comfy-table = "7.1.4"
 console = "0.16.0"
 indicatif = "0.17.12"
 chrono = { version = "0.4.41", features = ["serde"] }
-sled = "0.34.7"
 fjall = "2.11.2"
 
 [dev-dependencies]

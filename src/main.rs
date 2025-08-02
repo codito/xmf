@@ -70,19 +70,6 @@ async fn main() -> Result<()> {
 
     init_logging(cli.verbose);
 
-    if cli.force_refresh {
-        if let Ok(path) = xmf::core::config::AppConfig::default_data_path() {
-            let cache_path = path.join("cache");
-            if cache_path.exists() {
-                tracing::info!(
-                    "--force-refresh: clearing cache at {}",
-                    cache_path.display()
-                );
-                std::fs::remove_dir_all(&cache_path)?;
-            }
-        }
-    }
-
     let config_arg =
         if let Some(name) = &cli.config_name {
             let mut base_path = xmf::core::config::AppConfig::default_config_path()?;
@@ -110,7 +97,7 @@ async fn main() -> Result<()> {
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref()).await,
+        Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref(), cli.force_refresh).await,
         None => {
             Cli::command().print_help()?;
             Ok(())

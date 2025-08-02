@@ -3,6 +3,7 @@ pub mod memory;
 
 use crate::core::cache::{KeyValueCollection, Store};
 use crate::core::config::AppConfig;
+use anyhow::Result;
 use disk::{DiskCollection, DiskStore};
 use memory::MemoryCollection;
 use std::{
@@ -42,6 +43,16 @@ impl KeyValueStore {
             collections: RwLock::new(HashMap::new()),
             disk_store,
         }
+    }
+
+    pub fn clear_persistent_cache(&self) -> Result<()> {
+        if let Some(ds) = &self.disk_store {
+            ds.clear()?;
+            let mut collections = self.collections.write().unwrap();
+            collections
+                .retain(|_, collection| collection.downcast_ref::<DiskCollection>().is_none());
+        }
+        Ok(())
     }
 }
 

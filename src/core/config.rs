@@ -90,7 +90,7 @@ impl AppConfig {
     pub fn default_data_path() -> Result<PathBuf> {
         let proj_dirs = ProjectDirs::from("in", "codito", "xmf")
             .context("Could not determine project directories")?;
-        Ok(proj_dirs.data_dir().join("xmf"))
+        Ok(proj_dirs.data_dir().to_path_buf())
     }
 
     pub fn load_from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {

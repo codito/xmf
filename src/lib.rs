@@ -17,7 +17,11 @@ pub enum AppCommand {
 }
 
 /// Common command execution entry point
-pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Path>) -> Result<()> {
+pub async fn run_command(
+    command: AppCommand,
+    config_path: Option<&std::path::Path>,
+    force_refresh: bool,
+) -> Result<()> {
     info!("Funds Tracker starting...");
 
     let config = match config_path {
@@ -28,6 +32,11 @@ pub async fn run_command(command: AppCommand, config_path: Option<&std::path::Pa
 
     // Create shared caches
     let store = Arc::new(KeyValueStore::new());
+
+    if force_refresh {
+        info!("--force-refresh: clearing persistent cache");
+        store.clear_persistent_cache()?;
+    }
 
     // Initialize providers
     let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
