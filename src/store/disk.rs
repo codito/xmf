@@ -171,7 +171,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_disk_cache_remove() {
-        let (cache, _keyspace) = create_test_collection();
+        let (cache, _dir) = create_test_collection();
 
         cache
             .put("key1".as_bytes(), &123i32.to_be_bytes(), None)
