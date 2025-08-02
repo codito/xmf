@@ -1,8 +1,9 @@
 use crate::core::cache::KeyValueCollection;
 use anyhow::Result;
 use async_trait::async_trait;
-use fjall::PartitionHandle;
+use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tracing::debug;
 
@@ -10,6 +11,24 @@ use tracing::debug;
 struct CacheEntry {
     value: Vec<u8>,
     expires_at: Option<SystemTime>,
+}
+
+pub struct DiskStore {
+    keyspace: Arc<Keyspace>,
+}
+
+impl DiskStore {
+    pub fn new(path: &std::path::Path) -> Result<Self> {
+        let keyspace = Arc::new(Config::new(path).open()?);
+        Ok(Self { keyspace })
+    }
+
+    pub fn get_collection(&self, name: &str) -> Result<DiskCollection> {
+        Ok(DiskCollection::new(
+            self.keyspace
+                .open_partition(name, PartitionCreateOptions::default())?,
+        ))
+    }
 }
 
 pub struct DiskCollection {
@@ -97,23 +116,18 @@ impl KeyValueCollection for DiskCollection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fjall::{Config, Keyspace, PartitionCreateOptions};
-    use std::sync::Arc;
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
     use tokio::time::sleep;
 
-    fn create_test_collection() -> (DiskCollection, Arc<Keyspace>) {
+    fn create_test_collection() -> (DiskCollection, TempDir) {
         let dir = tempdir().unwrap();
-        let keyspace = Arc::new(Config::new(dir.path()).open().unwrap());
-        let partition = keyspace
-            .open_partition("test", PartitionCreateOptions::default())
-            .unwrap();
-        (DiskCollection::new(partition), keyspace)
+        let store = DiskStore::new(dir.path()).unwrap();
+        (store.get_collection("test").unwrap(), dir)
     }
 
     #[tokio::test]
     async fn test_disk_cache_get_put() {
-        let (cache, _keyspace) = create_test_collection();
+        let (cache, _dir) = create_test_collection();
 
         // Initially, cache is empty
         assert!(cache.get("key1".as_bytes()).await.is_none());
@@ -135,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_disk_cache_ttl_expiration() {
-        let (cache, _keyspace) = create_test_collection();
+        let (cache, _dir) = create_test_collection();
 
         // Put value with 10ms TTL
         cache
@@ -173,7 +187,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_disk_cache_clear() {
-        let (cache, _keyspace) = create_test_collection();
+        let (cache, _dir) = create_test_collection();
 
         cache
             .put("key1".as_bytes(), &123i32.to_be_bytes(), None)
