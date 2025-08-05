@@ -10,6 +10,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Force refresh of cached data
+    #[arg(long, global = true)]
+    force_refresh: bool,
+
     /// Path to custom configuration file (overrides default config search)
     #[arg(
         short,
@@ -93,7 +97,7 @@ async fn main() -> Result<()> {
 
     let result = match cli.command {
         Some(Commands::Setup) => setup(),
-        Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref()).await,
+        Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref(), cli.force_refresh).await,
         None => {
             Cli::command().print_help()?;
             Ok(())

@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::NaiveDate;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FundMetadata {
     pub isin: String,
     pub fund_type: String,

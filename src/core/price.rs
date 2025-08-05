@@ -3,10 +3,11 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::Duration;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum HistoricalPeriod {
     OneDay,
     FiveDays,
@@ -49,7 +50,7 @@ impl HistoricalPeriod {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceResult {
     pub price: f64,
     pub currency: String,

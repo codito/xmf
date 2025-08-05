@@ -37,11 +37,12 @@ mod test_utils {
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_currency_api() {
     use xmf::core::currency::CurrencyRateProvider;
-    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
+    use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(MemoryCache::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
@@ -74,11 +75,12 @@ async fn test_real_yahoo_currency_api() {
 #[test_log::test(tokio::test)]
 async fn test_real_kuvera_api() {
     use xmf::core::metadata::MetadataProvider;
-    use xmf::providers::MemoryCache;
     use xmf::providers::kuvera_provider::KuveraProvider;
+    use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(MemoryCache::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = KuveraProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
@@ -137,6 +139,7 @@ async fn test_full_app_flow_with_amfi_mock() {
     // Setup config file with AMFI investment and provider
     let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
     let config_path = config_file.path();
+    let temp_dir = tempfile::tempdir().unwrap();
     let config_content = format!(
         r#"
         portfolios:
@@ -148,15 +151,17 @@ async fn test_full_app_flow_with_amfi_mock() {
           amfi:
             base_url: {}
         currency: "INR"
+        data_path: "{}"
     "#,
         isin,
-        mock_server.uri()
+        mock_server.uri(),
+        temp_dir.path().to_string_lossy().replace('\\', "\\\\")
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
 
     // Run app and verify success
-    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path)).await;
+    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path), false).await;
     assert!(
         result.is_ok(),
         "Main function failed with: {:?}",
@@ -202,6 +207,7 @@ async fn test_full_app_flow_with_mock() {
     // Setup config file
     let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
     let config_path = config_file.path();
+    let temp_dir = tempfile::tempdir().unwrap();
     let config_content = format!(
         r#"
         portfolios:
@@ -213,14 +219,16 @@ async fn test_full_app_flow_with_mock() {
           yahoo:
             base_url: {}
         currency: "USD"
+        data_path: "{}"
     "#,
-        mock_server.uri()
+        mock_server.uri(),
+        temp_dir.path().to_string_lossy().replace('\\', "\\\\")
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
 
     // Run app and verify success
-    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path)).await;
+    let result = xmf::run_command(xmf::AppCommand::Summary, Some(config_path), false).await;
     assert!(
         result.is_ok(),
         "Main function failed with: {:?}",
@@ -231,11 +239,12 @@ async fn test_full_app_flow_with_mock() {
 #[test_log::test(tokio::test)]
 async fn test_real_yahoo_finance_api() {
     use xmf::core::price::PriceProvider;
-    use xmf::providers::MemoryCache;
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
+    use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(MemoryCache::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
@@ -272,11 +281,12 @@ async fn test_real_yahoo_finance_api() {
 #[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
     use xmf::core::price::PriceProvider;
-    use xmf::providers::MemoryCache;
     use xmf::providers::amfi_provider::AmfiProvider;
+    use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(MemoryCache::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
