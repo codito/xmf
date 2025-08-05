@@ -2,7 +2,6 @@ pub mod disk;
 pub mod memory;
 
 use crate::core::cache::{KeyValueCollection, Store};
-use crate::core::config::AppConfig;
 use anyhow::Result;
 use disk::{DiskCollection, DiskStore};
 use memory::MemoryCollection;
@@ -19,8 +18,7 @@ pub struct KeyValueStore {
 }
 
 impl KeyValueStore {
-    #[cfg(test)]
-    pub(crate) fn new_for_test(path: &std::path::Path) -> Self {
+    pub fn with_custom_path(path: &std::path::Path) -> Self {
         Self {
             collections: RwLock::new(HashMap::new()),
             disk_store: DiskStore::new(path).ok(),
@@ -35,13 +33,10 @@ impl KeyValueStore {
     }
 
     pub fn new() -> Self {
-        let disk_store = AppConfig::default_data_path()
-            .ok()
-            .and_then(|path| DiskStore::new(&path.join("cache")).ok());
-
+        // We'll need access to config to get proper data path - let main handle this conditionally
         Self {
             collections: RwLock::new(HashMap::new()),
-            disk_store,
+            disk_store: None,
         }
     }
 

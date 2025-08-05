@@ -80,7 +80,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_get_collection() {
         let dir = tempdir().unwrap();
-        let cache = KeyValueStore::new_for_test(dir.path());
+        let cache = KeyValueStore::with_custom_path(dir.path());
 
         // Test getting a non-existent collection
         assert!(cache.get_collection("test", false, false).is_none());
@@ -109,7 +109,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_remove_collection() {
         let dir = tempdir().unwrap();
-        let cache = KeyValueStore::new_for_test(dir.path());
+        let cache = KeyValueStore::with_custom_path(dir.path());
 
         // Create a collection
         assert!(cache.get_collection("test", true, true).is_some());
@@ -208,7 +208,7 @@ mod tests {
 
         // Create a store, add a value to a disk collection
         {
-            let store = KeyValueStore::new_for_test(&path);
+            let store = KeyValueStore::with_custom_path(&path);
             let collection = store.get_collection("persist_test", true, true).unwrap();
             collection.put(b"mykey", b"myvalue", None).await;
 
@@ -217,7 +217,7 @@ mod tests {
         }
 
         // Create another store instance with the same path
-        let store2 = KeyValueStore::new_for_test(&path);
+        let store2 = KeyValueStore::with_custom_path(&path);
         let collection2 = store2.get_collection("persist_test", true, true).unwrap();
         let value = collection2.get(b"mykey").await;
 
