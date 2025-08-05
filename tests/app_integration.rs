@@ -155,7 +155,7 @@ async fn test_full_app_flow_with_amfi_mock() {
     "#,
         isin,
         mock_server.uri(),
-        temp_dir.path().display()
+        temp_dir.path().to_string_lossy().replace('\\', "\\\\")
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
@@ -222,7 +222,7 @@ async fn test_full_app_flow_with_mock() {
         data_path: "{}"
     "#,
         mock_server.uri(),
-        temp_dir.path().display()
+        temp_dir.path().to_string_lossy().replace('\\', "\\\\")
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
