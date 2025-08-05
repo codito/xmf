@@ -31,7 +31,10 @@ pub async fn run_command(
     debug!("Loaded config: {config:#?}");
 
     // Create shared caches
-    let store = Arc::new(KeyValueStore::new());
+    let data_path = config
+        .default_data_path()
+        .expect("Failed to get default data path");
+    let store = Arc::new(KeyValueStore::new(data_path.as_path()));
 
     if force_refresh {
         info!("--force-refresh: clearing persistent cache");

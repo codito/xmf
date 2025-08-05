@@ -72,6 +72,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub providers: ProvidersConfig,
     pub currency: String,
+    pub data_path: Option<String>,
 }
 
 impl AppConfig {
@@ -87,7 +88,10 @@ impl AppConfig {
         Ok(proj_dirs.config_dir().join("config.yaml"))
     }
 
-    pub fn default_data_path() -> Result<PathBuf> {
+    pub fn default_data_path(&self) -> Result<PathBuf> {
+        if let Some(custom_path) = &self.data_path {
+            return Ok(PathBuf::from(custom_path));
+        }
         let proj_dirs = ProjectDirs::from("in", "codito", "xmf")
             .context("Could not determine project directories")?;
         Ok(proj_dirs.data_dir().to_path_buf())

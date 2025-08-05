@@ -40,8 +40,9 @@ async fn test_real_yahoo_currency_api() {
     use xmf::providers::yahoo_finance::YahooCurrencyProvider;
     use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(KeyValueStore::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = YahooCurrencyProvider::new(base_url, cache);
 
     let from_currency = "USD";
@@ -77,8 +78,9 @@ async fn test_real_kuvera_api() {
     use xmf::providers::kuvera_provider::KuveraProvider;
     use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(KeyValueStore::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = KuveraProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests
@@ -137,6 +139,7 @@ async fn test_full_app_flow_with_amfi_mock() {
     // Setup config file with AMFI investment and provider
     let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
     let config_path = config_file.path();
+    let temp_dir = tempfile::tempdir().unwrap();
     let config_content = format!(
         r#"
         portfolios:
@@ -148,9 +151,11 @@ async fn test_full_app_flow_with_amfi_mock() {
           amfi:
             base_url: {}
         currency: "INR"
+        data_path: "{}"
     "#,
         isin,
-        mock_server.uri()
+        mock_server.uri(),
+        temp_dir.path().display()
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
@@ -202,6 +207,7 @@ async fn test_full_app_flow_with_mock() {
     // Setup config file
     let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
     let config_path = config_file.path();
+    let temp_dir = tempfile::tempdir().unwrap();
     let config_content = format!(
         r#"
         portfolios:
@@ -213,8 +219,10 @@ async fn test_full_app_flow_with_mock() {
           yahoo:
             base_url: {}
         currency: "USD"
+        data_path: "{}"
     "#,
-        mock_server.uri()
+        mock_server.uri(),
+        temp_dir.path().display()
     );
 
     fs::write(config_path, &config_content).expect("Failed to write config file");
@@ -234,8 +242,9 @@ async fn test_real_yahoo_finance_api() {
     use xmf::providers::yahoo_finance::YahooFinanceProvider;
     use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://query1.finance.yahoo.com";
-    let cache = std::sync::Arc::new(KeyValueStore::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = YahooFinanceProvider::new(base_url, cache);
 
     let symbol = "AAPL";
@@ -275,8 +284,9 @@ async fn test_real_amfi_api() {
     use xmf::providers::amfi_provider::AmfiProvider;
     use xmf::store::KeyValueStore;
 
+    let temp_dir = tempfile::tempdir().unwrap();
     let base_url = "https://mf.captnemo.in";
-    let cache = std::sync::Arc::new(KeyValueStore::new());
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
     let provider = AmfiProvider::new(base_url, cache);
 
     // Use same ISIN as unit tests

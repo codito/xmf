@@ -18,7 +18,7 @@ pub struct KeyValueStore {
 }
 
 impl KeyValueStore {
-    pub fn with_custom_path(path: &std::path::Path) -> Self {
+    pub fn new(path: &std::path::Path) -> Self {
         Self {
             collections: RwLock::new(HashMap::new()),
             disk_store: DiskStore::new(path).ok(),
@@ -29,14 +29,6 @@ impl KeyValueStore {
     pub(crate) fn persist(&self) {
         if let Some(ds) = &self.disk_store {
             ds.persist().unwrap();
-        }
-    }
-
-    pub fn new() -> Self {
-        // We'll need access to config to get proper data path - let main handle this conditionally
-        Self {
-            collections: RwLock::new(HashMap::new()),
-            disk_store: None,
         }
     }
 
@@ -51,11 +43,11 @@ impl KeyValueStore {
     }
 }
 
-impl Default for KeyValueStore {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// impl Default for KeyValueStore {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
 
 impl Store for KeyValueStore {
     fn get_collection(
