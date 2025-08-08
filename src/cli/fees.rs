@@ -157,12 +157,12 @@ async fn calculate_portfolio_fees(
         let mut expense_ratio = 0.0;
         let mut error = None;
 
-        if let Investment::MutualFund(mf) = investment {
-            if let Some(result) = metadata_results.get(&mf.isin) {
-                match result {
-                    Ok(meta) => expense_ratio = meta.expense_ratio,
-                    Err(e) => error = Some(e.to_string()),
-                }
+        if let Investment::MutualFund(mf) = investment
+            && let Some(result) = metadata_results.get(&mf.isin)
+        {
+            match result {
+                Ok(meta) => expense_ratio = meta.expense_ratio,
+                Err(e) => error = Some(e.to_string()),
             }
         }
 

@@ -36,10 +36,10 @@ impl KeyValueCollection for MemoryCollection {
         let cache = self.inner.read().await;
         if let Some(entry) = cache.get(key) {
             // Check if entry has expired
-            if let Some(expiry) = entry.expires_at {
-                if expiry < Instant::now() {
-                    return None;
-                }
+            if let Some(expiry) = entry.expires_at
+                && expiry < Instant::now()
+            {
+                return None;
             }
             return Some(entry.value.clone());
         }

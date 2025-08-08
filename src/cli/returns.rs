@@ -163,10 +163,10 @@ async fn calculate_portfolio_returns(
     }
 
     for (period, total_weight) in &period_contributors {
-        if let Some(weighted_cagr) = portfolio_cagrs.get_mut(period) {
-            if *total_weight > 0.0 {
-                *weighted_cagr /= *total_weight;
-            }
+        if let Some(weighted_cagr) = portfolio_cagrs.get_mut(period)
+            && *total_weight > 0.0
+        {
+            *weighted_cagr /= *total_weight;
         }
     }
 

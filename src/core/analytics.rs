@@ -132,10 +132,10 @@ pub async fn calculate_portfolio_value(
     if all_valid {
         holdings.total_converted_value = Some(total_converted_value);
         for investment in &mut holdings.investments {
-            if let Some(value) = investment.converted_value {
-                if total_converted_value > 0.0 {
-                    investment.weight = Some((value / total_converted_value) * 100.0);
-                }
+            if let Some(value) = investment.converted_value
+                && total_converted_value > 0.0
+            {
+                investment.weight = Some((value / total_converted_value) * 100.0);
             }
         }
     }

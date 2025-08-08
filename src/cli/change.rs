@@ -164,10 +164,10 @@ async fn calculate_portfolio_changes(
 
     // Normalize weighted changes for periods where total weight might not be 100%
     for (period, total_weight) in &period_contributors {
-        if let Some(weighted_change) = portfolio_changes.get_mut(period) {
-            if *total_weight > 0.0 {
-                *weighted_change /= *total_weight;
-            }
+        if let Some(weighted_change) = portfolio_changes.get_mut(period)
+            && *total_weight > 0.0
+        {
+            *weighted_change /= *total_weight;
         }
     }
 

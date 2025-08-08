@@ -62,15 +62,15 @@ impl KeyValueCollection for DiskCollection {
         let res: Result<Option<Vec<u8>>> = (|| {
             if let Some(value) = self.partition.get(key)? {
                 let entry: CacheEntry = serde_json::from_slice(&value)?;
-                if let Some(expires_at) = entry.expires_at {
-                    if SystemTime::now() > expires_at {
-                        debug!(
-                            "Cache entry expired for key: {:?}",
-                            String::from_utf8_lossy(key)
-                        );
-                        self.partition.remove(key)?;
-                        return Ok(None);
-                    }
+                if let Some(expires_at) = entry.expires_at
+                    && SystemTime::now() > expires_at
+                {
+                    debug!(
+                        "Cache entry expired for key: {:?}",
+                        String::from_utf8_lossy(key)
+                    );
+                    self.partition.remove(key)?;
+                    return Ok(None);
                 }
                 debug!("Cache HIT for key: {:?}", String::from_utf8_lossy(key));
                 return Ok(Some(entry.value));
