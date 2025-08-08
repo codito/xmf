@@ -122,10 +122,9 @@ impl PriceProvider for AmfiProvider {
                         .iter()
                         .rev()
                         .find(|(date, _)| *date <= period_start_date)
+                        && *price > 0.0
                     {
-                        if *price > 0.0 {
-                            historical_prices.insert(period, *price);
-                        }
+                        historical_prices.insert(period, *price);
                     }
                 }
             }

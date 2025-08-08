@@ -50,10 +50,10 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             // Logic is not perfect since we're not excluding weekends and other holidays.
             // Use approximation to avoid multiple API calls to the providers.
             let target_date = reference_date - period.to_duration();
-            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes) {
-                if price > 0.0 {
-                    historical_prices.insert(period, price);
-                }
+            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes)
+                && price > 0.0
+            {
+                historical_prices.insert(period, price);
             }
         }
     } else if let Some(prev_close) = chart_item.meta.previous_close {
