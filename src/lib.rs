@@ -37,7 +37,7 @@ pub async fn run_command(
     let store = Arc::new(KeyValueStore::new(data_path.as_path()));
 
     if force_refresh {
-        info!("--force-refresh: clearing persistent cache");
+        info!("--refresh: clearing persistent cache");
         store.clear_persistent_cache()?;
     }
 
