@@ -1,6 +1,6 @@
 use crate::core::cache::{KeyValueCollection, Store};
 use crate::core::{HistoricalPeriod, PriceProvider, PriceResult};
-use crate::providers::util::with_retry;
+use crate::providers::util::{seconds_until, with_retry};
 use crate::store::KeyValueStore;
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
@@ -9,7 +9,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::debug;
+use tracing::{debug, warn};
 
 pub struct AmfiProvider {
     base_url: String,
@@ -138,12 +138,24 @@ impl PriceProvider for AmfiProvider {
             short_name,
         };
 
-        // Cache with 1 day TTL (mutual funds change daily)
+        // Calculate TTL until next refresh at 7PM UTC
+        let ttl_seconds = match seconds_until(19, 0) {
+            Ok(ttl) => ttl,
+            Err(e) => {
+                warn!(
+                    "Failed calculating 7PM UTC refresh TTL: {}. Using fallback 1 day",
+                    e
+                );
+                24 * 60 * 60 // Fallback to 1 day
+            }
+        };
+
+        // Cache with TTL aligned to 7PM UTC refresh schedule
         self.cache
             .put(
                 identifier.as_bytes(),
                 &serde_json::to_vec(&result).unwrap(),
-                Some(Duration::from_secs(24 * 60 * 60)),
+                Some(Duration::from_secs(ttl_seconds)),
             )
             .await;
 
