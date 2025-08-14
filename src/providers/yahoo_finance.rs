@@ -22,13 +22,6 @@ fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]
 fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalPeriod, f64> {
     let mut historical_prices = HashMap::new();
 
-    // Special handling for 1d period: use previous_close when available (trading-day accurate)
-    if let Some(prev_close) = chart_item.meta.previous_close
-        && prev_close > 0.0
-    {
-        historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
-    }
-
     if let (Some(timestamps), Some(closes)) = (
         chart_item.timestamp.as_ref(),
         chart_item
@@ -45,7 +38,12 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             None => return historical_prices,
         };
 
-        // Only calculate these periods using historical data
+        // Use the last element in the time series for 1-day period (most recent close)
+        if let Some(prev_close) = closes.last().copied().flatten() {
+            historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
+        }
+
+        // Calculate other periods using historical data
         for period in [
             HistoricalPeriod::FiveDays,
             HistoricalPeriod::OneMonth,
@@ -356,6 +354,8 @@ mod tests {
         let p_1m = 130.0;
         let ts_5d = (now - chrono::Duration::days(5) + chrono::Duration::days(1)).timestamp();
         let p_5d = 145.0;
+        let ts_1d = (now - chrono::Duration::days(1)).timestamp();
+        let p_1d = 140.0;
 
         let mock_response = format!(
             r#"{{
@@ -364,13 +364,12 @@ mod tests {
                         "meta": {{
                             "regularMarketPrice": {current_price},
                             "currency": "USD",
-                            "shortName": "Apple Inc.",
-                            "chartPreviousClose": 140.0
+                            "shortName": "Apple Inc."
                         }},
-                        "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
+                        "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}, {ts_1d}],
                         "indicators": {{
                             "quote": [{{
-                                "close": [{p_5y}, {p_1y}, {p_1m}, {p_5d}]
+                                "close": [{p_5y}, {p_1y}, {p_1m}, {p_5d}, {p_1d}]
                             }}]
                         }}
                     }}]
@@ -388,10 +387,10 @@ mod tests {
         assert_eq!(result.currency, "USD");
         assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
 
-        // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
-        // Also includes 1D since we set the last available data as reference
+        // We should have 1D, 5D, 1M, 1Y, 3Y, 5Y, 10Y: 7 periods
         assert_eq!(result.historical_prices.len(), 7);
-        assert_eq!(result.historical_prices[&HistoricalPeriod::OneDay], 140.0);
+
+        assert_eq!(result.historical_prices[&HistoricalPeriod::OneDay], p_1d);
 
         assert!(
             (result
@@ -471,6 +470,7 @@ mod tests {
     async fn test_price_fetch_normalizes_gbp_to_gbp() {
         let now = chrono::Utc::now();
         let current_price = 15065.0; // in pence
+        let ts_1d = (now - chrono::Duration::days(1)).timestamp();
         let p_1d = 15000.0; // in pence
         let ts_1y = (now - chrono::Duration::days(365 - 10)).timestamp();
         let p_1y = 12000.0; // in pence
@@ -482,13 +482,12 @@ mod tests {
                         "meta": {{
                             "regularMarketPrice": {current_price},
                             "currency": "GBp",
-                            "shortName": "UK STOCK PLC",
-                            "chartPreviousClose": {p_1d}
+                            "shortName": "UK STOCK PLC"
                         }},
-                        "timestamp": [{ts_1y}],
+                        "timestamp": [{ts_1y}, {ts_1d}],
                         "indicators": {{
                             "quote": [{{
-                                "close": [{p_1y}]
+                                "close": [{p_1y}, {p_1d}]
                             }}]
                         }}
                     }}]
@@ -511,7 +510,6 @@ mod tests {
             .unwrap();
         assert!((hist_1d - 150.00).abs() < 0.001);
 
-        // find_closest_price will find p_1y for OneYear period.
         let hist_1y = result
             .historical_prices
             .get(&HistoricalPeriod::OneYear)
