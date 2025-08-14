@@ -22,6 +22,13 @@ fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]
 fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalPeriod, f64> {
     let mut historical_prices = HashMap::new();
 
+    // Special handling for 1d period: use previous_close when available (trading-day accurate)
+    if let Some(prev_close) = chart_item.meta.previous_close
+        && prev_close > 0.0
+    {
+        historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
+    }
+
     if let (Some(timestamps), Some(closes)) = (
         chart_item.timestamp.as_ref(),
         chart_item
@@ -38,8 +45,8 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             None => return historical_prices,
         };
 
+        // Only calculate these periods using historical data
         for period in [
-            HistoricalPeriod::OneDay,
             HistoricalPeriod::FiveDays,
             HistoricalPeriod::OneMonth,
             HistoricalPeriod::OneYear,
@@ -55,11 +62,6 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             {
                 historical_prices.insert(period, price);
             }
-        }
-    } else if let Some(prev_close) = chart_item.meta.previous_close {
-        // Handle case where we only have meta data (no historical bars)
-        if prev_close > 0.0 {
-            historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
     }
 
@@ -354,7 +356,8 @@ mod tests {
                         "meta": {{
                             "regularMarketPrice": {current_price},
                             "currency": "USD",
-                            "shortName": "Apple Inc."
+                            "shortName": "Apple Inc.",
+                            "chartPreviousClose": 140.0
                         }},
                         "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
                         "indicators": {{
@@ -380,6 +383,7 @@ mod tests {
         // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
         // Also includes 1D since we set the last available data as reference
         assert_eq!(result.historical_prices.len(), 7);
+        assert_eq!(result.historical_prices[&HistoricalPeriod::OneDay], 140.0);
 
         assert!(
             (result
