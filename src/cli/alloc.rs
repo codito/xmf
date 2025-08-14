@@ -1,12 +1,12 @@
 use super::ui;
 use crate::core::allocation::AssetCategory;
-use crate::core::analytics::{self, PortfolioValue};
+use crate::core::analytics;
 use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
 use crate::core::metadata::MetadataProvider;
 use crate::core::price::{PriceProvider, PriceResult};
 use anyhow::Result;
-use comfy_table::{Cell, Table};
+use comfy_table::Cell;
 use futures::future::join_all;
 use std::collections::HashMap;
 
