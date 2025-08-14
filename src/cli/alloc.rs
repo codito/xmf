@@ -83,8 +83,8 @@ pub async fn run(
             continue;
         }
 
-        // Accumulate values by category
-        let mut categories: HashMap<AssetCategory, f64> = HashMap::new();
+        // Accumulate investments by category
+        let mut categories: HashMap<AssetCategory, Vec<(&Investment, f64)>> = HashMap::new();
         let portfolio = &portfolios[i];
 
         for (investment, value) in portfolio
@@ -92,25 +92,27 @@ pub async fn run(
             .iter()
             .zip(portfolio_value.investments.iter())
         {
-            let category = match investment {
-                Investment::Stock(_) => AssetCategory::Equity,
-                Investment::FixedDeposit(_) => AssetCategory::Debt,
-                Investment::MutualFund(mf) => {
-                    if let Some(cat) = metadata_cache.get(&mf.isin) {
-                        *cat
-                    } else {
-                        let cat = match metadata_provider.fetch_metadata(&mf.isin).await {
-                            Ok(meta) => AssetCategory::from(meta.fund_category.as_str()),
-                            Err(_) => AssetCategory::Other,
-                        };
-                        metadata_cache.insert(mf.isin.clone(), cat);
-                        cat
-                    }
-                }
-            };
-
             if let Some(v) = value.converted_value {
-                *categories.entry(category).or_insert(0.0) += v;
+                let category = match investment {
+                    Investment::Stock(_) => AssetCategory::Equity,
+                    Investment::FixedDeposit(_) => AssetCategory::Debt,
+                    Investment::MutualFund(mf) => {
+                        if let Some(cat) = metadata_cache.get(&mf.isin) {
+                            *cat
+                        } else {
+                            let cat = match metadata_provider.fetch_metadata(&mf.isin).await {
+                                Ok(meta) => AssetCategory::from(meta.fund_category.as_str()),
+                                Err(_) => AssetCategory::Other,
+                            };
+                            metadata_cache.insert(mf.isin.clone(), cat);
+                            cat
+                        }
+                    }
+                };
+                categories
+                    .entry(category)
+                    .or_default()
+                    .push((investment, v));
             }
         }
 
@@ -127,59 +129,96 @@ pub async fn run(
 
 fn display_allocation_table(
     portfolio_name: &str,
-    allocation: HashMap<AssetCategory, f64>,
+    allocation: HashMap<AssetCategory, Vec<(&Investment, f64)>>,
     total_value: Option<f64>,
     target_currency: &str,
 ) {
     let mut table = ui::new_styled_table();
     table.set_header(vec![
-        ui::header_cell("Asset Class"),
+        ui::header_cell("Category"),
+        ui::header_cell("Investment"),
         ui::header_cell("Value"),
         ui::header_cell("Allocation"),
     ]);
 
-    // Extract valid allocation data from the map
-    let total = total_value.unwrap_or_else(|| allocation.values().sum());
-    let mut allocation_data = allocation
-        .into_iter()
-        .map(|(cat, value)| {
-            let percentage = if total > 0.0 {
+    // Calculate portfolio total
+    let total = total_value.unwrap_or_else(|| {
+        allocation
+            .values()
+            .flat_map(|investments| investments.iter().map(|(_, v)| *v))
+            .sum()
+    });
+
+    // Convert to Vec for sorting
+    let mut categories: Vec<_> = allocation.into_iter().collect();
+    // Sort by total category value (descending)
+    categories.sort_by(|(_, a), (_, b)| {
+        let a_total: f64 = a.iter().map(|(_, v)| v).sum();
+        let b_total: f64 = b.iter().map(|(_, v)| v).sum();
+        b_total.partial_cmp(&a_total).unwrap()
+    });
+
+    for (category, investments) in &mut categories {
+        // Within category, sort investments by value (descending)
+        investments.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+
+        // Calculate category total
+        let category_total: f64 = investments.iter().map(|(_, v)| v).sum();
+        let category_percentage = if total > 0.0 {
+            category_total / total * 100.0
+        } else {
+            0.0
+        };
+
+        // Display category row (using only the text part, no emoji)
+        let category_name = category.display_info().0;
+        table.add_row(vec![
+            Cell::new(ui::style_text(category_name, ui::StyleType::TotalLabel)),
+            Cell::new(""),
+            Cell::new(ui::style_text(
+                &format!("{:.2} {}", category_total, target_currency),
+                ui::StyleType::TotalLabel,
+            )),
+            ui::format_percentage_cell(category_percentage),
+        ]);
+
+        // Display investments in this category
+        for (investment, value) in investments {
+            let (name, inv_type) = match investment {
+                Investment::Stock(stock) => (stock.symbol.clone(), "Stock"),
+                Investment::MutualFund(mf) => (mf.isin.clone(), "Mutual Fund"),
+                Investment::FixedDeposit(fd) => (fd.name.clone(), "Fixed Deposit"),
+            };
+
+            let allocation_perc = if total > 0.0 {
                 value / total * 100.0
             } else {
                 0.0
             };
-            (cat, value, percentage)
-        })
-        .collect::<Vec<_>>();
 
-    // Sort by highest value first
-    allocation_data.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-
-    // Add rows to the table
-    for (category, value, percentage) in &allocation_data {
-        let (name, emoji) = category.display_info();
-        let styled_name = format!("{} {}", emoji, name);
-
-        table.add_row(vec![
-            Cell::new(styled_name),
-            Cell::new(ui::style_text(
-                &format!("{:.2} {}", value, target_currency),
-                ui::StyleType::TotalLabel,
-            )),
-            ui::format_percentage_cell(*percentage),
-        ]);
+            table.add_row(vec![
+                Cell::new(""),
+                Cell::new(format!("{}: {}", inv_type, name)),
+                Cell::new(ui::style_text(
+                    &format!("{:.2} {}", value, target_currency),
+                    ui::StyleType::Default,
+                )),
+                ui::format_percentage_cell(allocation_perc),
+            ]);
+        }
     }
 
-    // Add portfolio header
+    // Display portfolio header
     println!(
         "\nPortfolio: {}\n",
         ui::style_text(portfolio_name, ui::StyleType::Title)
     );
 
-    // Add total row with consistent styling
+    // Display total row
     if let Some(total) = total_value {
         table.add_row(vec![
             Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
+            Cell::new(""),
             Cell::new(ui::style_text(
                 &format!("{:.2} {}", total, target_currency),
                 ui::StyleType::TotalValue,
@@ -189,6 +228,7 @@ fn display_allocation_table(
     } else {
         table.add_row(vec![
             Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
+            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
             Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
             Cell::new("N/A"),
         ]);
