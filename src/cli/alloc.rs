@@ -206,28 +206,25 @@ mod tests {
     use crate::core::currency::CurrencyRateProvider;
     use crate::core::metadata::{FundMetadata, MetadataProvider};
     use crate::core::price::PriceResult;
+    use std::collections::HashMap;
 
     // Define mock currency provider
     struct MockCurrencyProvider;
-    use anyhow::Result;
-    use async_trait::async_trait;
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl CurrencyRateProvider for MockCurrencyProvider {
-        async fn get_rate(&self, _from: &str, _to: &str) -> Result<f64> {
+        async fn get_rate(&self, _from: &str, _to: &str) -> anyhow::Result<f64> {
             Ok(1.0)
         }
     }
-    use anyhow::anyhow;
-    use async_trait::async_trait;
-    use chrono::NaiveDate;
 
     // Create a mock metadata provider for testing
     struct MockMetadataProviderImpl;
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl MetadataProvider for MockMetadataProviderImpl {
         async fn fetch_metadata(&self, identifier: &str) -> anyhow::Result<FundMetadata> {
+            use chrono::NaiveDate;
             match identifier {
                 "EQUITY_FUND" => Ok(FundMetadata {
                     isin: "EQUITY_FUND".to_string(),
@@ -251,7 +248,7 @@ mod tests {
                     fund_rating_date: Some(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap()),
                     category: "Debt".to_string(),
                 }),
-                _ => Err(anyhow!("Unknown fund")),
+                _ => Err(anyhow::anyhow!("Unknown fund")),
             }
         }
     }
@@ -259,9 +256,9 @@ mod tests {
     // Mock price provider implementation for testing
     struct MockPriceProviderImpl;
 
-    #[async_trait]
+    #[async_trait::async_trait]
     impl PriceProvider for MockPriceProviderImpl {
-        async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
+        async fn fetch_price(&self, symbol: &str) -> anyhow::Result<PriceResult> {
             let price = match symbol {
                 "AAPL" => 150.0,
                 "DEBT_FUND" => 100.0,
@@ -303,7 +300,7 @@ mod tests {
 
         let symbol_provider = MockPriceProviderImpl;
         let isin_provider = MockPriceProviderImpl;
-        let currency_provider = MockCurrencyProviderImpl;
+        let currency_provider = MockCurrencyProvider;
         let metadata_provider = MockMetadataProviderImpl;
 
         let result = run(
