@@ -176,7 +176,7 @@ fn display_allocation_table(
         table.add_row(vec![
             Cell::new(&category),
             Cell::new(""),
-            Cell::new(format!("{:.2}%", category_percentage)),
+            ui::format_percentage_cell(category_percentage),
             Cell::new(format!("{:.2}", category_total)),
         ]);
 
