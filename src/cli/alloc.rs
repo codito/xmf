@@ -83,8 +83,8 @@ pub async fn run(
             continue;
         }
 
-        // Accumulate investments by category
-        let mut categories: HashMap<AssetCategory, Vec<(&Investment, f64)>> = HashMap::new();
+        // Accumulate investments by category (using raw fund_category strings)
+        let mut categories: HashMap<String, Vec<(&Investment, f64)>> = HashMap::new();
         let portfolio = &portfolios[i];
 
         for (investment, value) in portfolio
@@ -94,21 +94,22 @@ pub async fn run(
         {
             if let Some(v) = value.converted_value {
                 let category = match investment {
-                    Investment::Stock(_) => AssetCategory::Equity,
-                    Investment::FixedDeposit(_) => AssetCategory::Debt,
+                    Investment::Stock(_) => "Equity".to_string(),
+                    Investment::FixedDeposit(_) => "Debt".to_string(),
                     Investment::MutualFund(mf) => {
                         if let Some(cat) = metadata_cache.get(&mf.isin) {
-                            *cat
+                            cat.clone()
                         } else {
-                            let cat = match metadata_provider.fetch_metadata(&mf.isin).await {
-                                Ok(meta) => AssetCategory::from(meta.fund_category.as_str()),
-                                Err(_) => AssetCategory::Other,
-                            };
-                            metadata_cache.insert(mf.isin.clone(), cat);
-                            cat
+                            match metadata_provider.fetch_metadata(&mf.isin).await {
+                                Ok(meta) => meta.fund_category.clone(),
+                                Err(_) => "Other".to_string(),
+                            }
                         }
                     }
                 };
+                metadata_cache
+                    .entry(mf.isin.clone())
+                    .or_insert_with(|| category.clone());
                 categories
                     .entry(category)
                     .or_default()
@@ -129,7 +130,7 @@ pub async fn run(
 
 fn display_allocation_table(
     portfolio_name: &str,
-    allocation: HashMap<AssetCategory, Vec<(&Investment, f64)>>,
+    allocation: HashMap<String, Vec<(&Investment, f64)>>,
     total_value: Option<f64>,
     target_currency: &str,
 ) {
@@ -170,10 +171,9 @@ fn display_allocation_table(
             0.0
         };
 
-        // Display category row (using only the text part, no emoji)
-        let category_name = category.display_info().0;
+        // Display category row using raw category string
         table.add_row(vec![
-            Cell::new(ui::style_text(category_name, ui::StyleType::TotalLabel)),
+            Cell::new(ui::style_text(&category, ui::StyleType::TotalLabel)),
             Cell::new(""),
             Cell::new(ui::style_text(
                 &format!("{:.2} {}", category_total, target_currency),
