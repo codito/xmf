@@ -1,0 +1,318 @@
+use super::ui;
+use crate::core::allocation::AssetCategory;
+use crate::core::analytics::{self, PortfolioValue};
+use crate::core::config::{Investment, Portfolio};
+use crate::core::currency::CurrencyRateProvider;
+use crate::core::metadata::MetadataProvider;
+use crate::core::price::{PriceProvider, PriceResult};
+use anyhow::Result;
+use comfy_table::{Cell, Table};
+use futures::future::join_all;
+use std::collections::HashMap;
+
+pub async fn run(
+    portfolios: &[Portfolio],
+    symbol_provider: &(dyn PriceProvider + Send + Sync),
+    isin_provider: &(dyn PriceProvider + Send + Sync),
+    currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
+    metadata_provider: &(dyn MetadataProvider + Send + Sync),
+    target_currency: &str,
+) -> Result<()> {
+    // Pre-fetch prices for all investments across portfolios
+    let mut investments_to_fetch = HashMap::new();
+    for portfolio in portfolios {
+        for investment in &portfolio.investments {
+            match investment {
+                Investment::Stock(s) => {
+                    investments_to_fetch.insert(s.symbol.clone(), symbol_provider);
+                }
+                Investment::MutualFund(mf) => {
+                    investments_to_fetch.insert(mf.isin.clone(), isin_provider);
+                }
+                Investment::FixedDeposit(_) => {} // Skip price fetch for FDs
+            }
+        }
+    }
+
+    let pb = ui::new_progress_bar(investments_to_fetch.len() as u64, true);
+    pb.set_message("Fetching prices...");
+
+    let price_futures = investments_to_fetch.iter().map(|(id, provider)| {
+        let pb_clone = pb.clone();
+        async move {
+            let res = provider.fetch_price(id).await;
+            pb_clone.inc(1);
+            (id.clone(), res)
+        }
+    });
+
+    let price_results: HashMap<String, Result<PriceResult>> =
+        join_all(price_futures).await.into_iter().collect();
+    pb.finish_and_clear();
+
+    let all_investments = portfolios
+        .iter()
+        .map(|p| p.investments.len())
+        .sum::<usize>() as u64;
+    let pb = ui::new_progress_bar(all_investments, true);
+    pb.set_message("Calculating allocation...");
+
+    // Cache metadata for mutual funds
+    let mut metadata_cache = HashMap::new();
+    let mut portfolio_values = Vec::new();
+
+    for portfolio in portfolios {
+        // Calculate portfolio value with conversions
+        let portfolio_value = analytics::calculate_portfolio_value(
+            portfolio,
+            &price_results,
+            currency_provider,
+            target_currency,
+            &|| pb.inc(1),
+        )
+        .await;
+        portfolio_values.push(portfolio_value);
+    }
+
+    pb.finish_and_clear();
+
+    // Display allocation for each portfolio
+    for (i, portfolio_value) in portfolio_values.iter().enumerate() {
+        // Skip empty portfolios
+        if portfolio_value.investments.is_empty() {
+            continue;
+        }
+
+        // Accumulate values by category
+        let mut categories: HashMap<AssetCategory, f64> = HashMap::new();
+        let portfolio = &portfolios[i];
+
+        for (investment, value) in portfolio
+            .investments
+            .iter()
+            .zip(portfolio_value.investments.iter())
+        {
+            let category = match investment {
+                Investment::Stock(_) => AssetCategory::Equity,
+                Investment::FixedDeposit(_) => AssetCategory::Debt,
+                Investment::MutualFund(mf) => {
+                    if let Some(cat) = metadata_cache.get(&mf.isin) {
+                        *cat
+                    } else {
+                        let cat = match metadata_provider.fetch_metadata(&mf.isin).await {
+                            Ok(meta) => AssetCategory::from(meta.fund_category.as_str()),
+                            Err(_) => AssetCategory::Other,
+                        };
+                        metadata_cache.insert(mf.isin.clone(), cat);
+                        cat
+                    }
+                }
+            };
+
+            if let Some(v) = value.converted_value {
+                *categories.entry(category).or_insert(0.0) += v;
+            }
+        }
+
+        display_allocation_table(
+            &portfolio.name,
+            categories,
+            portfolio_value.total_converted_value,
+            target_currency,
+        );
+    }
+
+    Ok(())
+}
+
+fn display_allocation_table(
+    portfolio_name: &str,
+    allocation: HashMap<AssetCategory, f64>,
+    total_value: Option<f64>,
+    target_currency: &str,
+) {
+    let mut table = ui::new_styled_table();
+    table.set_header(vec![
+        ui::header_cell("Asset Class"),
+        ui::header_cell("Value"),
+        ui::header_cell("Allocation"),
+    ]);
+
+    // Extract valid allocation data from the map
+    let total = total_value.unwrap_or_else(|| allocation.values().sum());
+    let mut allocation_data = allocation
+        .into_iter()
+        .map(|(cat, value)| {
+            let percentage = if total > 0.0 {
+                value / total * 100.0
+            } else {
+                0.0
+            };
+            (cat, value, percentage)
+        })
+        .collect::<Vec<_>>();
+
+    // Sort by highest value first
+    allocation_data.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+
+    // Add rows to the table
+    for (category, value, percentage) in &allocation_data {
+        let (name, emoji) = category.display_info();
+        let styled_name = format!("{} {}", emoji, name);
+
+        table.add_row(vec![
+            Cell::new(styled_name),
+            Cell::new(ui::style_text(
+                &format!("{:.2} {}", value, target_currency),
+                ui::StyleType::TotalLabel,
+            )),
+            ui::format_percentage_cell(*percentage),
+        ]);
+    }
+
+    // Add portfolio header
+    println!(
+        "\nPortfolio: {}\n",
+        ui::style_text(portfolio_name, ui::StyleType::Title)
+    );
+
+    // Add total row with consistent styling
+    if let Some(total) = total_value {
+        table.add_row(vec![
+            Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
+            Cell::new(ui::style_text(
+                &format!("{:.2} {}", total, target_currency),
+                ui::StyleType::TotalValue,
+            )),
+            ui::format_percentage_cell(100.0),
+        ]);
+    } else {
+        table.add_row(vec![
+            Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
+            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
+            Cell::new("N/A"),
+        ]);
+    }
+
+    // Display the table
+    println!("{table}");
+    ui::print_separator();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::config::{FixedDepositInvestment, MutualFundInvestment, StockInvestment};
+    use crate::core::currency::CurrencyRateProvider;
+    use crate::core::metadata::{FundMetadata, MetadataProvider};
+    use crate::core::price::PriceResult;
+
+    // Define mock currency provider
+    struct MockCurrencyProvider;
+    use anyhow::Result;
+    use async_trait::async_trait;
+
+    #[async_trait]
+    impl CurrencyRateProvider for MockCurrencyProvider {
+        async fn get_rate(&self, _from: &str, _to: &str) -> Result<f64> {
+            Ok(1.0)
+        }
+    }
+    use anyhow::anyhow;
+    use async_trait::async_trait;
+    use chrono::NaiveDate;
+
+    // Create a mock metadata provider for testing
+    struct MockMetadataProviderImpl;
+
+    #[async_trait]
+    impl MetadataProvider for MockMetadataProviderImpl {
+        async fn fetch_metadata(&self, identifier: &str) -> anyhow::Result<FundMetadata> {
+            match identifier {
+                "EQUITY_FUND" => Ok(FundMetadata {
+                    isin: "EQUITY_FUND".to_string(),
+                    fund_type: "Equity".to_string(),
+                    fund_category: "Equity".to_string(),
+                    expense_ratio: 0.0,
+                    expense_ratio_date: NaiveDate::from_ymd_opt(2010, 1, 1).unwrap(),
+                    aum: 100000000.0,
+                    fund_rating: Some(5),
+                    fund_rating_date: Some(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap()),
+                    category: "Equity".to_string(),
+                }),
+                "DEBT_FUND" => Ok(FundMetadata {
+                    isin: "DEBT_FUND".to_string(),
+                    fund_type: "Debt".to_string(),
+                    fund_category: "Debt".to_string(),
+                    expense_ratio: 0.0,
+                    expense_ratio_date: NaiveDate::from_ymd_opt(2010, 1, 1).unwrap(),
+                    aum: 100000000.0,
+                    fund_rating: Some(4),
+                    fund_rating_date: Some(NaiveDate::from_ymd_opt(2010, 1, 1).unwrap()),
+                    category: "Debt".to_string(),
+                }),
+                _ => Err(anyhow!("Unknown fund")),
+            }
+        }
+    }
+
+    // Helper to create a mock price provider
+    fn mock_price_provider() -> MockPriceProvider {
+        let mut mock = MockPriceProvider::new();
+        mock.expect_fetch_price().returning(|symbol| {
+            Ok(PriceResult {
+                price: match symbol {
+                    "AAPL" => 150.0,
+                    "DEBT_FUND" => 100.0,
+                    _ => 0.0,
+                },
+                currency: "USD".to_string(),
+                historical_prices: HashMap::new(),
+                short_name: None,
+            })
+        });
+        mock
+    }
+
+    #[tokio::test]
+    async fn test_alloc_command() {
+        let portfolios = vec![Portfolio {
+            name: "Test".to_string(),
+            investments: vec![
+                Investment::Stock(StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0,
+                }),
+                Investment::MutualFund(MutualFundInvestment {
+                    isin: "EQUITY_FUND".to_string(),
+                    units: 100.0,
+                }),
+                Investment::MutualFund(MutualFundInvestment {
+                    isin: "DEBT_FUND".to_string(),
+                    units: 50.0,
+                }),
+                Investment::FixedDeposit(FixedDepositInvestment {
+                    name: "My FD".to_string(),
+                    value: 5000.0,
+                    currency: Some("USD".to_string()),
+                }),
+            ],
+        }];
+
+        let symbol_provider = mock_price_provider();
+        let isin_provider = mock_price_provider();
+        let currency_provider = MockCurrencyProvider::new();
+        let metadata_provider = MockMetadataProviderImpl;
+
+        let result = run(
+            &portfolios,
+            &symbol_provider,
+            &isin_provider,
+            &currency_provider,
+            &metadata_provider,
+            "USD",
+        )
+        .await;
+        assert!(result.is_ok());
+    }
+}
