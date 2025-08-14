@@ -191,7 +191,7 @@ fn display_allocation_table(
             };
 
             let allocation_perc = if total > 0.0 {
-                value / total * 100.0
+                *value / total * 100.0
             } else {
                 0.0
             };
@@ -200,8 +200,8 @@ fn display_allocation_table(
                 Cell::new(""),
                 Cell::new(format!("{}: {}", inv_type, name)),
                 Cell::new(ui::style_text(
-                    &format!("{:.2} {}", value, target_currency),
-                    ui::StyleType::Default,
+                    &format!("{:.2} {}", *value, target_currency),
+                    ui::StyleType::Subtle,
                 )),
                 ui::format_percentage_cell(allocation_perc),
             ]);
