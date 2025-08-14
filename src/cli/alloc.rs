@@ -139,8 +139,8 @@ fn display_allocation_table(
     table.set_header(vec![
         ui::header_cell("Category"),
         ui::header_cell("Investment"),
-        ui::header_cell("Value"),
         ui::header_cell("Allocation"),
+        ui::header_cell("Value"),
     ]);
 
     // Calculate portfolio total
@@ -176,8 +176,8 @@ fn display_allocation_table(
         table.add_row(vec![
             Cell::new(&category),
             Cell::new(""),
-            Cell::new(format!("{:.2} {}", category_total, target_currency)),
             Cell::new(format!("{:.2}%", category_percentage)),
+            Cell::new(format!("{:.2} {}", category_total, target_currency)),
         ]);
 
         // Display investments in this category
@@ -205,11 +205,8 @@ fn display_allocation_table(
             table.add_row(vec![
                 Cell::new(""),
                 Cell::new(display_name),
-                Cell::new(ui::style_text(
-                    &format!("{:.2} {}", *value, target_currency),
-                    ui::StyleType::Subtle,
-                )),
                 Cell::new(format!("{:.2}%", allocation_perc)),
+                Cell::new(format!("{:.2} {}", *value, target_currency)),
             ]);
         }
     }
