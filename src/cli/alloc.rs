@@ -178,15 +178,16 @@ fn display_allocation_table(
                 &format!("{:.2} {}", category_total, target_currency),
                 ui::StyleType::TotalLabel,
             )),
-            ui::format_percentage_cell(category_percentage),
+            Cell::new(format!("{:.2}%", category_percentage))
+                .add_attribute(comfy_table::Attribute::Bold),
         ]);
 
         // Display investments in this category
         for (investment, value) in investments {
-            let (name, inv_type) = match investment {
-                Investment::Stock(stock) => (stock.symbol.clone(), "Stock"),
-                Investment::MutualFund(mf) => (mf.isin.clone(), "Mutual Fund"),
-                Investment::FixedDeposit(fd) => (fd.name.clone(), "Fixed Deposit"),
+            let name = match investment {
+                Investment::Stock(stock) => stock.symbol.clone(),
+                Investment::MutualFund(mf) => mf.isin.clone(),
+                Investment::FixedDeposit(fd) => fd.name.clone(),
             };
 
             let allocation_perc = if total > 0.0 {
@@ -197,7 +198,7 @@ fn display_allocation_table(
 
             table.add_row(vec![
                 Cell::new(""),
-                Cell::new(format!("{}: {}", inv_type, name)),
+                Cell::new(name),
                 Cell::new(ui::style_text(
                     &format!("{:.2} {}", *value, target_currency),
                     ui::StyleType::Subtle,
@@ -222,7 +223,9 @@ fn display_allocation_table(
                 &format!("{:.2} {}", total, target_currency),
                 ui::StyleType::TotalValue,
             )),
-            ui::format_percentage_cell(100.0),
+            Cell::new("100.00%")
+                .add_attribute(comfy_table::Attribute::Bold)
+                .fg(comfy_table::Color::Green),
         ]);
     } else {
         table.add_row(vec![
