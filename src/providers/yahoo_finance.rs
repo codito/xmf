@@ -38,8 +38,16 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             None => return historical_prices,
         };
 
+        // For 1-day period: use the second last element (previous day's close)
+        // Last element is today's current price, second last is previous close
+        if closes.len() >= 2
+            && let Some(prev_close) = closes.get(closes.len() - 2).copied().flatten()
+        {
+            historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
+        }
+
+        // Calculate other periods using historical data
         for period in [
-            HistoricalPeriod::OneDay,
             HistoricalPeriod::FiveDays,
             HistoricalPeriod::OneMonth,
             HistoricalPeriod::OneYear,
@@ -55,11 +63,6 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             {
                 historical_prices.insert(period, price);
             }
-        }
-    } else if let Some(prev_close) = chart_item.meta.previous_close {
-        // Handle case where we only have meta data (no historical bars)
-        if prev_close > 0.0 {
-            historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
     }
 
@@ -124,8 +127,6 @@ struct PriceChartMeta {
     #[serde(alias = "regularMarketPrice")]
     regular_market_price: f64,
     currency: String,
-    #[serde(alias = "chartPreviousClose")]
-    previous_close: Option<f64>,
     #[serde(alias = "shortName")]
     short_name: Option<String>,
 }
@@ -162,11 +163,19 @@ impl PriceProvider for YahooFinanceProvider {
             .first()
             .ok_or_else(|| anyhow!("No price data found for symbol: {}", symbol))?;
 
-        let current_price = item.meta.regular_market_price;
-        let currency = item.meta.currency.clone();
+        let mut current_price = item.meta.regular_market_price;
+        let mut currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
 
-        let historical_prices = extract_historical_prices(item);
+        let mut historical_prices = extract_historical_prices(item);
+
+        if currency == "GBp" {
+            currency = "GBP".to_string();
+            current_price /= 100.0;
+            for (_, price) in historical_prices.iter_mut() {
+                *price /= 100.0;
+            }
+        }
 
         let result = PriceResult {
             price: current_price,
@@ -346,6 +355,9 @@ mod tests {
         let p_1m = 130.0;
         let ts_5d = (now - chrono::Duration::days(5) + chrono::Duration::days(1)).timestamp();
         let p_5d = 145.0;
+        let ts_prev = (now - chrono::Duration::days(1)).timestamp();
+        let p_prev = 140.0;
+        let ts_curr = now.timestamp();
 
         let mock_response = format!(
             r#"{{
@@ -356,10 +368,10 @@ mod tests {
                             "currency": "USD",
                             "shortName": "Apple Inc."
                         }},
-                        "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}],
+                        "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}, {ts_prev}, {ts_curr}],
                         "indicators": {{
                             "quote": [{{
-                                "close": [{p_5y}, {p_1y}, {p_1m}, {p_5d}]
+                                "close": [{p_5y}, {p_1y}, {p_1m}, {p_5d}, {p_prev}, {current_price}]
                             }}]
                         }}
                     }}]
@@ -377,9 +389,10 @@ mod tests {
         assert_eq!(result.currency, "USD");
         assert_eq!(result.short_name, Some("Apple Inc.".to_string()));
 
-        // 10Y, 5Y, 3Y, 1Y, 1M, 5D, 1D
-        // Also includes 1D since we set the last available data as reference
+        // We should have 1D, 5D, 1M, 1Y, 3Y, 5Y, 10Y: 7 periods
         assert_eq!(result.historical_prices.len(), 7);
+
+        assert_eq!(result.historical_prices[&HistoricalPeriod::OneDay], p_prev);
 
         assert!(
             (result
@@ -453,6 +466,58 @@ mod tests {
             result.unwrap_err().to_string(),
             "No price data found for symbol: INVALID"
         );
+    }
+
+    #[tokio::test]
+    async fn test_price_fetch_normalizes_gbp_to_gbp() {
+        let now = chrono::Utc::now();
+        let current_price = 15065.0; // in pence
+        let ts_prev = (now - chrono::Duration::days(1)).timestamp();
+        let p_prev = 15000.0; // in pence
+        let ts_curr = now.timestamp();
+        let ts_1y = (now - chrono::Duration::days(365 - 10)).timestamp();
+        let p_1y = 12000.0; // in pence
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": {current_price},
+                            "currency": "GBp",
+                            "shortName": "UK STOCK PLC"
+                        }},
+                        "timestamp": [{ts_1y}, {ts_prev}, {ts_curr}],
+                        "indicators": {{
+                            "quote": [{{
+                                "close": [{p_1y}, {p_prev}, {current_price}]
+                            }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+        );
+
+        let mock_server = create_mock_server("UK.L", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("UK.L").await.unwrap();
+
+        assert_eq!(result.currency, "GBP");
+        assert!((result.price - 150.65).abs() < 0.001);
+
+        let hist_1d = result
+            .historical_prices
+            .get(&HistoricalPeriod::OneDay)
+            .unwrap();
+        assert!((hist_1d - 150.00).abs() < 0.001);
+
+        let hist_1y = result
+            .historical_prices
+            .get(&HistoricalPeriod::OneYear)
+            .unwrap();
+        assert!((hist_1y - 120.00).abs() < 0.001);
     }
 
     // Tests for YahooCurrencyProvider (CurrencyRateProvider)
