@@ -121,6 +121,7 @@ pub async fn run(
             categories,
             portfolio_value.total_converted_value,
             target_currency,
+            &price_results,
         );
     }
 
@@ -132,6 +133,7 @@ fn display_allocation_table(
     allocation: HashMap<String, Vec<(&Investment, f64)>>,
     total_value: Option<f64>,
     target_currency: &str,
+    price_results: &HashMap<String, Result<PriceResult>>,
 ) {
     let mut table = ui::new_styled_table();
     table.set_header(vec![
@@ -184,9 +186,17 @@ fn display_allocation_table(
 
         // Display investments in this category
         for (investment, value) in investments {
-            let name = match investment {
-                Investment::Stock(stock) => stock.symbol.clone(),
-                Investment::MutualFund(mf) => mf.isin.clone(),
+            let display_name = match investment {
+                Investment::Stock(stock) => price_results
+                    .get(&stock.symbol)
+                    .and_then(|pr| pr.as_ref().ok())
+                    .and_then(|pr| pr.short_name.clone())
+                    .unwrap_or_else(|| stock.symbol.clone()),
+                Investment::MutualFund(mf) => price_results
+                    .get(&mf.isin)
+                    .and_then(|pr| pr.as_ref().ok())
+                    .and_then(|pr| pr.short_name.clone())
+                    .unwrap_or_else(|| mf.isin.clone()),
                 Investment::FixedDeposit(fd) => fd.name.clone(),
             };
 
@@ -198,7 +208,7 @@ fn display_allocation_table(
 
             table.add_row(vec![
                 Cell::new(""),
-                Cell::new(name),
+                Cell::new(display_name),
                 Cell::new(ui::style_text(
                     &format!("{:.2} {}", *value, target_currency),
                     ui::StyleType::Subtle,
