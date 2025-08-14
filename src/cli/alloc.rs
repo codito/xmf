@@ -256,22 +256,24 @@ mod tests {
         }
     }
 
-    // Helper to create a mock price provider
-    fn mock_price_provider() -> MockPriceProvider {
-        let mut mock = MockPriceProvider::new();
-        mock.expect_fetch_price().returning(|symbol| {
+    // Mock price provider implementation for testing
+    struct MockPriceProviderImpl;
+
+    #[async_trait]
+    impl PriceProvider for MockPriceProviderImpl {
+        async fn fetch_price(&self, symbol: &str) -> Result<PriceResult> {
+            let price = match symbol {
+                "AAPL" => 150.0,
+                "DEBT_FUND" => 100.0,
+                _ => 0.0,
+            };
             Ok(PriceResult {
-                price: match symbol {
-                    "AAPL" => 150.0,
-                    "DEBT_FUND" => 100.0,
-                    _ => 0.0,
-                },
+                price,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
                 short_name: None,
             })
-        });
-        mock
+        }
     }
 
     #[tokio::test]
@@ -299,9 +301,9 @@ mod tests {
             ],
         }];
 
-        let symbol_provider = mock_price_provider();
-        let isin_provider = mock_price_provider();
-        let currency_provider = MockCurrencyProvider::new();
+        let symbol_provider = MockPriceProviderImpl;
+        let isin_provider = MockPriceProviderImpl;
+        let currency_provider = MockCurrencyProviderImpl;
         let metadata_provider = MockMetadataProviderImpl;
 
         let result = run(
