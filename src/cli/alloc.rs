@@ -101,7 +101,7 @@ pub async fn run(
                         } else {
                             let fetched_category =
                                 match metadata_provider.fetch_metadata(&mf.isin).await {
-                                    Ok(meta) => meta.fund_category.clone(),
+                                    Ok(meta) => meta.fund_type.clone(),
                                     Err(_) => "Other".to_string(),
                                 };
                             metadata_cache.insert(mf.isin.clone(), fetched_category.clone());
@@ -229,7 +229,7 @@ fn display_allocation_table(
             Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
             Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
             Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
-            Cell::new("N/A"),
+            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
         ]);
     }
 
