@@ -220,30 +220,19 @@ fn display_allocation_table(
         ui::style_text(portfolio_name, ui::StyleType::Title)
     );
 
-    // Display total row
-    if let Some(total) = total_value {
-        table.add_row(vec![
-            Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
-            Cell::new(""),
-            Cell::new(ui::style_text(
-                &format!("{:.2} {}", total, target_currency),
-                ui::StyleType::TotalValue,
-            )),
-            Cell::new("100.00%")
-                .add_attribute(comfy_table::Attribute::Bold)
-                .fg(comfy_table::Color::Green),
-        ]);
-    } else {
-        table.add_row(vec![
-            Cell::new(ui::style_text("TOTAL", ui::StyleType::TotalLabel)),
-            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
-            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
-            Cell::new(ui::style_text("N/A", ui::StyleType::Error)),
-        ]);
-    }
-
     // Display the table
     println!("{table}");
+
+    // Print portfolio total after the table
+    if let Some(total) = total_value {
+        println!(
+            "\nPortfolio Total Value ({}): {:.2}\n",
+            target_currency, total
+        );
+    } else {
+        println!("\nPortfolio Total Value: N/A\n");
+    }
+
     ui::print_separator();
 }
 
