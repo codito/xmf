@@ -164,11 +164,19 @@ impl PriceProvider for YahooFinanceProvider {
             .first()
             .ok_or_else(|| anyhow!("No price data found for symbol: {}", symbol))?;
 
-        let current_price = item.meta.regular_market_price;
-        let currency = item.meta.currency.clone();
+        let mut current_price = item.meta.regular_market_price;
+        let mut currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
 
-        let historical_prices = extract_historical_prices(item);
+        let mut historical_prices = extract_historical_prices(item);
+
+        if currency == "GBp" {
+            currency = "GBP".to_string();
+            current_price /= 100.0;
+            for (_, price) in historical_prices.iter_mut() {
+                *price /= 100.0;
+            }
+        }
 
         let result = PriceResult {
             price: current_price,
@@ -457,6 +465,58 @@ mod tests {
             result.unwrap_err().to_string(),
             "No price data found for symbol: INVALID"
         );
+    }
+
+    #[tokio::test]
+    async fn test_price_fetch_normalizes_gbp_to_gbp() {
+        let now = chrono::Utc::now();
+        let current_price = 15065.0; // in pence
+        let p_1d = 15000.0; // in pence
+        let ts_1y = (now - chrono::Duration::days(365 - 10)).timestamp();
+        let p_1y = 12000.0; // in pence
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": {current_price},
+                            "currency": "GBp",
+                            "shortName": "UK STOCK PLC",
+                            "chartPreviousClose": {p_1d}
+                        }},
+                        "timestamp": [{ts_1y}],
+                        "indicators": {{
+                            "quote": [{{
+                                "close": [{p_1y}]
+                            }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+        );
+
+        let mock_server = create_mock_server("UK.L", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("UK.L").await.unwrap();
+
+        assert_eq!(result.currency, "GBP");
+        assert!((result.price - 150.65).abs() < 0.001);
+
+        let hist_1d = result
+            .historical_prices
+            .get(&HistoricalPeriod::OneDay)
+            .unwrap();
+        assert!((hist_1d - 150.00).abs() < 0.001);
+
+        // find_closest_price will find p_1y for OneYear period.
+        let hist_1y = result
+            .historical_prices
+            .get(&HistoricalPeriod::OneYear)
+            .unwrap();
+        assert!((hist_1y - 120.00).abs() < 0.001);
     }
 
     // Tests for YahooCurrencyProvider (CurrencyRateProvider)
