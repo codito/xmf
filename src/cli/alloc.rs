@@ -140,7 +140,7 @@ fn display_allocation_table(
         ui::header_cell("Category"),
         ui::header_cell("Investment"),
         ui::header_cell("Allocation"),
-        ui::header_cell("Value"),
+        ui::header_cell(&format!("Value ({})", target_currency)),
     ]);
 
     // Calculate portfolio total
@@ -177,7 +177,7 @@ fn display_allocation_table(
             Cell::new(&category),
             Cell::new(""),
             Cell::new(format!("{:.2}%", category_percentage)),
-            Cell::new(format!("{:.2} {}", category_total, target_currency)),
+            Cell::new(format!("{:.2}", category_total)),
         ]);
 
         // Display investments in this category
@@ -206,7 +206,7 @@ fn display_allocation_table(
                 Cell::new(""),
                 Cell::new(display_name),
                 Cell::new(format!("{:.2}%", allocation_perc)),
-                Cell::new(format!("{:.2} {}", *value, target_currency)),
+                Cell::new(format!("{:.2}", *value)),
             ]);
         }
     }
@@ -223,10 +223,12 @@ fn display_allocation_table(
     // Print portfolio total after the table
     if let Some(total) = total_value {
         println!(
-            "\n{}: {:.2} {}\n",
-            ui::style_text("Portfolio Total Value", ui::StyleType::TotalLabel),
-            total,
-            target_currency
+            "\n{}: {:.2}\n",
+            ui::style_text(
+                &format!("Portfolio Total Value ({})", target_currency),
+                ui::StyleType::TotalLabel
+            ),
+            total
         );
     } else {
         println!(
