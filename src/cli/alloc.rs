@@ -174,14 +174,10 @@ fn display_allocation_table(
 
         // Display category row using raw category string
         table.add_row(vec![
-            Cell::new(ui::style_text(&category, ui::StyleType::TotalLabel)),
+            Cell::new(&category),
             Cell::new(""),
-            Cell::new(ui::style_text(
-                &format!("{:.2} {}", category_total, target_currency),
-                ui::StyleType::TotalLabel,
-            )),
-            Cell::new(format!("{:.2}%", category_percentage))
-                .add_attribute(comfy_table::Attribute::Bold),
+            Cell::new(format!("{:.2} {}", category_total, target_currency)),
+            Cell::new(format!("{:.2}%", category_percentage)),
         ]);
 
         // Display investments in this category
