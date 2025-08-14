@@ -1,5 +1,4 @@
 use super::ui;
-use crate::core::allocation::AssetCategory;
 use crate::core::analytics;
 use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
@@ -58,7 +57,7 @@ pub async fn run(
     pb.set_message("Calculating allocation...");
 
     // Cache metadata for mutual funds
-    let mut metadata_cache = HashMap::new();
+    let mut metadata_cache: HashMap<String, String> = HashMap::new();
     let mut portfolio_values = Vec::new();
 
     for portfolio in portfolios {
@@ -100,16 +99,16 @@ pub async fn run(
                         if let Some(cat) = metadata_cache.get(&mf.isin) {
                             cat.clone()
                         } else {
-                            match metadata_provider.fetch_metadata(&mf.isin).await {
-                                Ok(meta) => meta.fund_category.clone(),
-                                Err(_) => "Other".to_string(),
-                            }
+                            let fetched_category =
+                                match metadata_provider.fetch_metadata(&mf.isin).await {
+                                    Ok(meta) => meta.fund_category.clone(),
+                                    Err(_) => "Other".to_string(),
+                                };
+                            metadata_cache.insert(mf.isin.clone(), fetched_category.clone());
+                            fetched_category
                         }
                     }
                 };
-                metadata_cache
-                    .entry(mf.isin.clone())
-                    .or_insert_with(|| category.clone());
                 categories
                     .entry(category)
                     .or_default()
