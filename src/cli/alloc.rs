@@ -209,7 +209,7 @@ fn display_allocation_table(
                     &format!("{:.2} {}", *value, target_currency),
                     ui::StyleType::Subtle,
                 )),
-                ui::format_percentage_cell(allocation_perc),
+                Cell::new(format!("{:.2}%", allocation_perc)),
             ]);
         }
     }
@@ -226,11 +226,16 @@ fn display_allocation_table(
     // Print portfolio total after the table
     if let Some(total) = total_value {
         println!(
-            "\nPortfolio Total Value ({}): {:.2}\n",
-            target_currency, total
+            "\n{}: {:.2} {}\n",
+            ui::style_text("Portfolio Total Value", ui::StyleType::TotalLabel),
+            total,
+            target_currency
         );
     } else {
-        println!("\nPortfolio Total Value: N/A\n");
+        println!(
+            "\n{}: N/A\n",
+            ui::style_text("Portfolio Total Value", ui::StyleType::TotalLabel)
+        );
     }
 
     ui::print_separator();
