@@ -1,5 +1,6 @@
 //! Core business logic abstractions
 
+pub mod allocation;
 pub mod analytics;
 pub mod cache;
 pub mod config;
