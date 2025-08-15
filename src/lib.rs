@@ -14,6 +14,7 @@ pub enum AppCommand {
     Change,
     Returns,
     Fees,
+    Alloc,
 }
 
 /// Common command execution entry point
@@ -78,6 +79,17 @@ pub async fn run_command(
         }
         AppCommand::Fees => {
             cli::fees::run(
+                &config.portfolios,
+                &*symbol_provider,
+                &*isin_provider,
+                &*currency_provider,
+                &*metadata_provider,
+                &config.currency,
+            )
+            .await
+        }
+        AppCommand::Alloc => {
+            cli::alloc::run(
                 &config.portfolios,
                 &*symbol_provider,
                 &*isin_provider,

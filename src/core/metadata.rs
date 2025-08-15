@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FundMetadata {
     pub isin: String,
-    pub fund_type: String,
-    pub fund_category: String,
+    pub fund_type: String,     // Type of the fund: Debt, Equity etc.
+    pub fund_category: String, // Category within a type. E.g., Liquid Fund.
     pub expense_ratio: f64,
     pub expense_ratio_date: NaiveDate,
     pub aum: f64,

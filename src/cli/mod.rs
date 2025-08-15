@@ -1,3 +1,4 @@
+pub mod alloc;
 pub mod change;
 pub mod fees;
 pub mod returns;
