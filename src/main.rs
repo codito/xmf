@@ -45,6 +45,7 @@ impl From<Commands> for xmf::AppCommand {
             Commands::Change => xmf::AppCommand::Change,
             Commands::Returns => xmf::AppCommand::Returns,
             Commands::Fees => xmf::AppCommand::Fees,
+            Commands::Alloc => xmf::AppCommand::Alloc,
             Commands::Setup => unreachable!("Setup command should be handled separately"),
         }
     }
@@ -62,6 +63,8 @@ enum Commands {
     Returns,
     /// Display expense ratios and fees
     Fees,
+    /// Display asset allocation breakdown
+    Alloc,
 }
 
 #[tokio::main]
