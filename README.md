@@ -61,7 +61,9 @@ Pre-built binaries for Linux, Windows, and macOS are available with each [releas
 
 ## Configuration
 
-The configuration file uses YAML format and supports multiple portfolios. Here's an example:
+The configuration file uses YAML format and supports multiple portfolios. You can find a complete example configuration in [`docs/example_config.yaml`](docs/example_config.yaml).
+
+After running `xmf setup`, you'll get a configuration file with detailed comments explaining each section. Here's a minimal example:
 
 ```yaml
 portfolios:

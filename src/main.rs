@@ -46,7 +46,7 @@ impl From<Commands> for xmf::AppCommand {
             Commands::Returns => xmf::AppCommand::Returns,
             Commands::Fees => xmf::AppCommand::Fees,
             Commands::Alloc => xmf::AppCommand::Alloc,
-            Commands::Setup => unreachable!("Setup command should be handled separately"),
+            Commands::Setup => xmf::AppCommand::Setup,
         }
     }
 }
@@ -99,7 +99,6 @@ async fn main() -> Result<()> {
         };
 
     let result = match cli.command {
-        Some(Commands::Setup) => setup(),
         Some(cmd) => xmf::run_command(cmd.into(), config_arg.as_deref(), cli.refresh).await,
         None => {
             Cli::command().print_help()?;
@@ -111,37 +110,4 @@ async fn main() -> Result<()> {
         tracing::error!(error = %e, "Application failed");
     }
     result
-}
-
-fn setup() -> anyhow::Result<()> {
-    use anyhow::Context;
-
-    let path = xmf::core::config::AppConfig::default_config_path()?;
-
-    if path.exists() {
-        anyhow::bail!("Configuration file already exists at {}", path.display());
-    }
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
-    }
-
-    let default_config = r#"---
-portfolios:
-  - name: "Example"
-    investments: []
-
-providers:
-  yahoo:
-    base_url: "https://query1.finance.yahoo.com"
-
-currency: "USD"
-"#;
-
-    std::fs::write(&path, default_config)
-        .with_context(|| format!("Failed to write config file to {}", path.display()))?;
-
-    tracing::info!("Created default configuration at {}", path.display());
-    Ok(())
 }
