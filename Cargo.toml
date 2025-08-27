@@ -1,7 +1,15 @@
 [package]
 name = "xmf"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
+description = "A CLI app to track finance portfolios"
+license = "MIT"
+repository = "https://github.com/codito/xmf"
+homepage = "https://github.com/codito/xmf"
+documentation = "https://github.com/codito/xmf"
+readme = "README.md"
+categories = ["command-line-utilities", "finance"]
+keywords = ["finance", "portfolio", "tracker", "cli"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,7 +27,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 rust_finprim = "0.4.0"
-rust_decimal = "1"  # Needed for rust_finprim::rate::cagr
+rust_decimal = "1"                                                  # Needed for rust_finprim::rate::cagr
 comfy-table = "7.1.4"
 console = "0.16.0"
 indicatif = "0.17.12"

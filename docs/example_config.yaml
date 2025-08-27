@@ -1,0 +1,42 @@
+# Example configuration file for xmf
+# This file demonstrates the basic structure and available options
+
+# List of your investment portfolios
+portfolios:
+  # Each portfolio has a name and a list of investments
+  - name: "My Stocks"
+    investments:
+      # Stock investments require a symbol and number of units
+      - symbol: "AAPL" # Apple Inc.
+        units: 10.0
+      - symbol: "MSFT" # Microsoft Corporation
+        units: 5.0
+
+  - name: "Mutual Funds"
+    investments:
+      # Mutual fund investments require an ISIN and number of units
+      - isin: "INF179KB1HU9" # Example ISIN for a mutual fund
+        units: 100.0
+
+  - name: "Fixed Deposits"
+    investments:
+      # Fixed deposits require a name, value, and optionally a currency
+      - name: "Bank FD"
+        value: 50000.0
+        currency: "INR" # Optional - defaults to global currency if omitted
+
+# Configuration for data providers
+providers:
+  # Yahoo Finance provider for stock prices
+  yahoo:
+    base_url: "https://query1.finance.yahoo.com"
+
+  # AMFI provider for Indian mutual fund NAVs
+  amfi:
+    base_url: "https://mf.captnemo.in"
+
+# Default currency for the application
+currency: "USD"
+# Optional: Custom path for cached data (defaults to system data directory)
+# data_path: "/path/to/custom/data/directory"
+

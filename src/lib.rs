@@ -8,13 +8,14 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{debug, info};
 
-/// Commands that require full provider setup
+/// Commands that require full provider setup, or setup command
 pub enum AppCommand {
     Summary,
     Change,
     Returns,
     Fees,
     Alloc,
+    Setup,
 }
 
 /// Common command execution entry point
@@ -23,81 +24,93 @@ pub async fn run_command(
     config_path: Option<&std::path::Path>,
     force_refresh: bool,
 ) -> Result<()> {
-    info!("Funds Tracker starting...");
-
-    let config = match config_path {
-        Some(path) => core::config::AppConfig::load_from_path(path)?,
-        None => core::config::AppConfig::load()?,
-    };
-    debug!("Loaded config: {config:#?}");
-
-    // Create shared caches
-    let data_path = config
-        .default_data_path()
-        .expect("Failed to get default data path");
-    let store = Arc::new(KeyValueStore::new(data_path.as_path()));
-
-    if force_refresh {
-        info!("--refresh: clearing persistent cache");
-        store.clear_persistent_cache()?;
-    }
-
-    // Initialize providers
-    let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
-        setup_providers(&config, &store);
-
     match command {
-        AppCommand::Summary => {
-            cli::summary::run(
-                &config.portfolios,
-                &*symbol_provider,
-                &*isin_provider,
-                &*currency_provider,
-                &config.currency,
-            )
-            .await
+        AppCommand::Setup => {
+            // For setup command, config_path is the path where we want to create the config
+            if let Some(target_path) = config_path {
+                cli::setup::setup_at_path(target_path)
+            } else {
+                cli::setup::setup()
+            }
         }
-        AppCommand::Change => {
-            cli::change::run(
-                &config.portfolios,
-                &*symbol_provider,
-                &*isin_provider,
-                &*currency_provider,
-                &config.currency,
-            )
-            .await
-        }
-        AppCommand::Returns => {
-            cli::returns::run(
-                &config.portfolios,
-                &*symbol_provider,
-                &*isin_provider,
-                &*currency_provider,
-                &config.currency,
-            )
-            .await
-        }
-        AppCommand::Fees => {
-            cli::fees::run(
-                &config.portfolios,
-                &*symbol_provider,
-                &*isin_provider,
-                &*currency_provider,
-                &*metadata_provider,
-                &config.currency,
-            )
-            .await
-        }
-        AppCommand::Alloc => {
-            cli::alloc::run(
-                &config.portfolios,
-                &*symbol_provider,
-                &*isin_provider,
-                &*currency_provider,
-                &*metadata_provider,
-                &config.currency,
-            )
-            .await
+        _ => {
+            // All other commands follow the normal flow
+            let config = match config_path {
+                Some(path) => core::config::AppConfig::load_from_path(path)?,
+                None => core::config::AppConfig::load()?,
+            };
+            debug!("Loaded config: {config:#?}");
+
+            // Create shared caches
+            let data_path = config
+                .default_data_path()
+                .expect("Failed to get default data path");
+            let store = Arc::new(KeyValueStore::new(data_path.as_path()));
+
+            if force_refresh {
+                info!("--refresh: clearing persistent cache");
+                store.clear_persistent_cache()?;
+            }
+
+            // Initialize providers
+            let (symbol_provider, isin_provider, currency_provider, metadata_provider) =
+                setup_providers(&config, &store);
+
+            match command {
+                AppCommand::Summary => {
+                    cli::summary::run(
+                        &config.portfolios,
+                        &*symbol_provider,
+                        &*isin_provider,
+                        &*currency_provider,
+                        &config.currency,
+                    )
+                    .await
+                }
+                AppCommand::Change => {
+                    cli::change::run(
+                        &config.portfolios,
+                        &*symbol_provider,
+                        &*isin_provider,
+                        &*currency_provider,
+                        &config.currency,
+                    )
+                    .await
+                }
+                AppCommand::Returns => {
+                    cli::returns::run(
+                        &config.portfolios,
+                        &*symbol_provider,
+                        &*isin_provider,
+                        &*currency_provider,
+                        &config.currency,
+                    )
+                    .await
+                }
+                AppCommand::Fees => {
+                    cli::fees::run(
+                        &config.portfolios,
+                        &*symbol_provider,
+                        &*isin_provider,
+                        &*currency_provider,
+                        &*metadata_provider,
+                        &config.currency,
+                    )
+                    .await
+                }
+                AppCommand::Alloc => {
+                    cli::alloc::run(
+                        &config.portfolios,
+                        &*symbol_provider,
+                        &*isin_provider,
+                        &*currency_provider,
+                        &*metadata_provider,
+                        &config.currency,
+                    )
+                    .await
+                }
+                AppCommand::Setup => unreachable!(), // Handled above
+            }
         }
     }
 }
