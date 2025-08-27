@@ -36,7 +36,7 @@ A command-line application written in Rust for tracking your investment portfoli
 
 ### Pre-built Binaries
 
-Coming soon! For now, please build from source.
+Pre-built binaries for Linux, Windows, and macOS are available with each [release](https://github.com/codito/xmf/releases).
 
 ## Quick Start
 
