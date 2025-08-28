@@ -1,4 +1,6 @@
 name: linux
+permissions:
+  contents: read
 
 on:
   push:
