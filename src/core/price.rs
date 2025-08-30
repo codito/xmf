@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono::Duration;
+use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -49,13 +49,30 @@ impl HistoricalPeriod {
             HistoricalPeriod::TenYears => Duration::days(365 * 10),
         }
     }
+
+    pub fn to_trading_days(&self) -> u32 {
+        match self {
+            HistoricalPeriod::OneDay => 1,
+            HistoricalPeriod::FiveDays => 5,
+            HistoricalPeriod::OneMonth => 21,
+            HistoricalPeriod::OneYear => 252,
+            HistoricalPeriod::ThreeYears => 756,
+            HistoricalPeriod::FiveYears => 1260,
+            HistoricalPeriod::TenYears => 2520,
+        }
+    }
+
+    pub fn variants() -> [&'static str; 7] {
+        ["1D", "5D", "1M", "1Y", "3Y", "5Y", "10Y"]
+    }
 }
 
 impl FromStr for HistoricalPeriod {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_uppercase().as_str() {
+        let s_upper = s.to_uppercase();
+        match s_upper.as_str() {
             "1D" => Ok(HistoricalPeriod::OneDay),
             "5D" => Ok(HistoricalPeriod::FiveDays),
             "1M" => Ok(HistoricalPeriod::OneMonth),
@@ -63,7 +80,14 @@ impl FromStr for HistoricalPeriod {
             "3Y" => Ok(HistoricalPeriod::ThreeYears),
             "5Y" => Ok(HistoricalPeriod::FiveYears),
             "10Y" => Ok(HistoricalPeriod::TenYears),
-            _ => Err(anyhow::anyhow!("Invalid historical period: {}", s)),
+            _ => {
+                let valid_periods = Self::variants().join(", ");
+                Err(anyhow::anyhow!(
+                    "Invalid period: '{}'. Valid periods are: {}",
+                    s,
+                    valid_periods
+                ))
+            }
         }
     }
 }
@@ -73,6 +97,7 @@ pub struct PriceResult {
     pub price: f64,
     pub currency: String,
     pub historical_prices: HashMap<HistoricalPeriod, f64>,
+    pub daily_prices: Vec<(NaiveDate, f64)>,
     pub short_name: Option<String>,
 }
 

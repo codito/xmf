@@ -3,8 +3,6 @@ use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
 use crate::core::price::{HistoricalPeriod, PriceResult};
 use anyhow::{Result, anyhow};
-use rust_decimal::Decimal;
-use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -198,35 +196,39 @@ pub fn calculate_rolling_returns(
     price_data: &PriceResult,
     period: HistoricalPeriod,
 ) -> Result<Option<RollingReturnStats>> {
-    let mut prices = price_data
-        .historical_prices
-        .clone()
-        .into_iter()
-        .collect::<Vec<_>>();
-    prices.sort_by_key(|k| k.0);
+    if price_data.daily_prices.is_empty() {
+        return Ok(None);
+    }
 
-    if prices.len() < period.to_duration().num_days() as usize {
+    let trading_days = period.to_trading_days() as usize;
+    if price_data.daily_prices.len() < trading_days {
+        return Ok(None);
+    }
+
+    // Sort by date to ensure chronological order
+    let mut sorted_daily = price_data.daily_prices.clone();
+    sorted_daily.sort_by_key(|(date, _)| *date);
+
+    // Convert to price vector only
+    let prices: Vec<f64> = sorted_daily.iter().map(|(_, price)| *price).collect();
+
+    if prices.len() < trading_days {
         return Ok(None);
     }
 
     let mut returns = Vec::new();
-    for window in prices.windows(period.to_duration().num_days() as usize) {
-        let old_price = Decimal::from_f64(window[0].1).ok_or_else(|| anyhow!("Invalid price"))?;
-        let new_price = Decimal::from_f64(window[window.len() - 1].1)
-            .ok_or_else(|| anyhow!("Invalid price"))?;
-        if old_price.is_zero() {
-            continue;
+    for window in prices.windows(trading_days) {
+        let start_price = window[0];
+        let end_price = window[trading_days - 1];
+        if start_price > 0.0 {
+            let years = (trading_days as f64) / 252.0; // 252 trading days per year
+            let cagr = ((end_price / start_price).powf(1.0 / years) - 1.0) * 100.0;
+            returns.push(cagr);
         }
-        let rate = (new_price - old_price) / old_price;
-        returns.push(
-            (rate * Decimal::from(100))
-                .to_f64()
-                .ok_or_else(|| anyhow!("Percentage conversion failed"))?,
-        );
     }
 
     if returns.is_empty() {
-        return Err(anyhow!("Could not calculate any returns"));
+        return Ok(None);
     }
 
     let count = returns.len() as f64;
@@ -316,6 +318,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
+                daily_prices: Vec::new(),
                 short_name: Some("Apple Inc.".to_string()),
             }),
         );
@@ -360,6 +363,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
+                daily_prices: Vec::new(),
                 short_name: Some("Apple Inc.".to_string()),
             }),
         );
@@ -407,6 +411,7 @@ mod tests {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
+                daily_prices: Vec::new(),
                 short_name: Some("Apple Inc.".to_string()),
             }),
         );
@@ -416,6 +421,7 @@ mod tests {
                 price: 100.0,
                 currency: "CAD".to_string(),
                 historical_prices: HashMap::new(),
+                daily_prices: Vec::new(),
                 short_name: Some("Royal Bank".to_string()),
             }),
         );

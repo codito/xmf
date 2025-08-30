@@ -43,7 +43,9 @@ impl From<Commands> for xmf::AppCommand {
         match cmd {
             Commands::Summary => xmf::AppCommand::Summary,
             Commands::Change => xmf::AppCommand::Change,
-            Commands::Returns => xmf::AppCommand::Returns,
+            Commands::Returns { rolling } => xmf::AppCommand::Returns {
+                rolling_period: rolling,
+            },
             Commands::Fees => xmf::AppCommand::Fees,
             Commands::Alloc => xmf::AppCommand::Alloc,
             Commands::Setup => xmf::AppCommand::Setup,
@@ -60,7 +62,11 @@ enum Commands {
     /// Display price change summary
     Change,
     /// Display CAGR return calculations
-    Returns,
+    Returns {
+        /// Calculate rolling returns for a specified period (e.g. 1y, 3y, 5y)
+        #[arg(long, value_name = "PERIOD")]
+        rolling: Option<String>,
+    },
     /// Display expense ratios and fees
     Fees,
     /// Display asset allocation breakdown

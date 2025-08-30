@@ -130,10 +130,30 @@ impl PriceProvider for AmfiProvider {
             }
         }
 
+        let mut daily_prices: Vec<(chrono::NaiveDate, f64)> = amfi_response
+            .historical_nav
+            .into_iter()
+            .map(|(date_str, price)| {
+                chrono::NaiveDate::parse_from_str(&date_str, "%Y-%m-%d").map(|date| (date, price))
+            })
+            .filter_map(Result::ok)
+            .collect();
+
+        // Add current day data
+        if let Ok(current_date) = chrono::NaiveDate::parse_from_str(&amfi_response.date, "%Y-%m-%d")
+        {
+            daily_prices.push((current_date, current_price));
+        }
+
+        // Sort by date and remove duplicates (keep last occurrence for same date)
+        daily_prices.sort_by_key(|(date, _)| *date);
+        daily_prices.dedup_by_key(|(date, _)| *date);
+
         let result = PriceResult {
             price: current_price,
             currency,
             historical_prices,
+            daily_prices,
             short_name,
         };
 

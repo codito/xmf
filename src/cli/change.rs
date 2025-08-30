@@ -274,6 +274,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Apple".to_string()),
                 historical_prices: HashMap::from([(HistoricalPeriod::OneDay, 90.0)]), // +11.11%
+                daily_prices: Vec::new(),
             }),
         );
         price_results.insert(
@@ -283,6 +284,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Google".to_string()),
                 historical_prices: HashMap::from([(HistoricalPeriod::OneDay, 180.0)]), // +11.11%
+                daily_prices: Vec::new(),
             }),
         );
 
@@ -329,6 +331,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Apple".to_string()),
                 historical_prices: HashMap::from([(HistoricalPeriod::OneDay, 90.0)]), // +11.11%
+                daily_prices: Vec::new(),
             }),
         );
         price_results.insert(
@@ -338,6 +341,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Google".to_string()),
                 historical_prices: HashMap::from([(HistoricalPeriod::OneDay, 180.0)]), // +11.11%
+                daily_prices: Vec::new(),
             }),
         );
 
@@ -378,6 +382,7 @@ mod tests {
                     (HistoricalPeriod::OneDay, 90.0),   // +11.11%
                     (HistoricalPeriod::FiveDays, 80.0), // +25%
                 ]),
+                daily_prices: Vec::new(),
             }),
         );
         // GOOG is missing the FiveDays period
@@ -388,6 +393,7 @@ mod tests {
                 currency: "USD".to_string(),
                 short_name: Some("Google".to_string()),
                 historical_prices: HashMap::from([(HistoricalPeriod::OneDay, 180.0)]), // +11.11%
+                daily_prices: Vec::new(),
             }),
         );
 

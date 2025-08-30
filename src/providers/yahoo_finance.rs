@@ -166,13 +166,36 @@ impl PriceProvider for YahooFinanceProvider {
         let mut current_price = item.meta.regular_market_price;
         let mut currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
-
+        let mut daily_prices = Vec::new();
         let mut historical_prices = extract_historical_prices(item);
+
+        if let (Some(timestamps), Some(closes)) = (
+            item.timestamp.as_ref(),
+            item.indicators
+                .as_ref()
+                .and_then(|inds| inds.quote.first())
+                .and_then(|q| q.close.as_ref()),
+        ) {
+            for (index, ts) in timestamps.iter().enumerate() {
+                if let Some(Some(close)) = closes.get(index) {
+                    let date = Utc
+                        .timestamp_opt(*ts, 0)
+                        .single()
+                        .map(|datetime| datetime.date_naive());
+                    if let Some(date) = date {
+                        daily_prices.push((date, *close));
+                    }
+                }
+            }
+        }
 
         if currency == "GBp" {
             currency = "GBP".to_string();
             current_price /= 100.0;
             for (_, price) in historical_prices.iter_mut() {
+                *price /= 100.0;
+            }
+            for (_, price) in daily_prices.iter_mut() {
                 *price /= 100.0;
             }
         }
@@ -181,6 +204,7 @@ impl PriceProvider for YahooFinanceProvider {
             price: current_price,
             currency,
             historical_prices,
+            daily_prices,
             short_name,
         };
 
@@ -451,6 +475,18 @@ mod tests {
                 .abs()
                 < 0.001
         );
+
+        assert_eq!(result.daily_prices.len(), 6);
+        let expected_dates = [ts_5y, ts_1y, ts_1m, ts_5d, ts_prev, ts_curr];
+        for (index, (date, _price)) in result.daily_prices.iter().enumerate() {
+            let expected_ts = expected_dates[index];
+            let expected_date = Utc
+                .timestamp_opt(expected_ts, 0)
+                .single()
+                .unwrap()
+                .date_naive();
+            assert_eq!(*date, expected_date);
+        }
     }
 
     #[tokio::test]
@@ -518,6 +554,11 @@ mod tests {
             .get(&HistoricalPeriod::OneYear)
             .unwrap();
         assert!((hist_1y - 120.00).abs() < 0.001);
+
+        // Check normalized daily prices
+        for (_, price) in &result.daily_prices {
+            assert!(price > &1.0); // Prices should be in pounds (GBP)
+        }
     }
 
     // Tests for YahooCurrencyProvider (CurrencyRateProvider)

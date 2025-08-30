@@ -309,6 +309,7 @@ mod tests {
                 price,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
+                daily_prices: Vec::new(),
                 short_name: None,
             })
         }
