@@ -1,8 +1,10 @@
 //! Provides functions for performing financial calculations on portfolios.
 use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
-use crate::core::price::PriceResult;
+use crate::core::price::{HistoricalPeriod, PriceResult};
 use anyhow::{Result, anyhow};
+use rust_decimal::Decimal;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -179,6 +181,91 @@ async fn convert_currency(
             )))
         }
     }
+}
+
+/// Represents the statistics of rolling returns for a specific period.
+#[derive(Debug, Clone, Copy)]
+pub struct RollingReturnStats {
+    pub average: f64,
+    pub min: f64,
+    pub max: f64,
+    pub std_dev: f64,
+    pub distribution: [f64; 5],
+}
+
+/// Calculates rolling returns for a given set of historical prices.
+pub fn calculate_rolling_returns(
+    price_data: &PriceResult,
+    period: HistoricalPeriod,
+) -> Result<Option<RollingReturnStats>> {
+    let mut prices = price_data
+        .historical_prices
+        .clone()
+        .into_iter()
+        .collect::<Vec<_>>();
+    prices.sort_by_key(|k| k.0);
+
+    if prices.len() < period.to_duration().num_days() as usize {
+        return Ok(None);
+    }
+
+    let mut returns = Vec::new();
+    for window in prices.windows(period.to_duration().num_days() as usize) {
+        let old_price = Decimal::from_f64(window[0].1).ok_or_else(|| anyhow!("Invalid price"))?;
+        let new_price = Decimal::from_f64(window[window.len() - 1].1)
+            .ok_or_else(|| anyhow!("Invalid price"))?;
+        if old_price.is_zero() {
+            continue;
+        }
+        let rate = (new_price - old_price) / old_price;
+        returns.push(
+            (rate * Decimal::from(100))
+                .to_f64()
+                .ok_or_else(|| anyhow!("Percentage conversion failed"))?,
+        );
+    }
+
+    if returns.is_empty() {
+        return Err(anyhow!("Could not calculate any returns"));
+    }
+
+    let count = returns.len() as f64;
+    let average = returns.iter().sum::<f64>() / count;
+    let std_dev = (returns
+        .iter()
+        .map(|&val| (val - average).powi(2))
+        .sum::<f64>()
+        / count)
+        .sqrt();
+    let min = returns.iter().cloned().fold(f64::MAX, f64::min);
+    let max = returns.iter().cloned().fold(f64::MIN, f64::max);
+
+    let mut distribution = [0.0; 5];
+    for &ret in &returns {
+        if ret < 0.0 {
+            distribution[0] += 1.0;
+        } else if ret < 5.0 {
+            distribution[1] += 1.0;
+        } else if ret < 10.0 {
+            distribution[2] += 1.0;
+        } else if ret < 20.0 {
+            distribution[3] += 1.0;
+        } else {
+            distribution[4] += 1.0;
+        }
+    }
+
+    for val in &mut distribution {
+        *val = (*val / count) * 100.0;
+    }
+
+    Ok(Some(RollingReturnStats {
+        average,
+        min,
+        max,
+        std_dev,
+        distribution,
+    }))
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum HistoricalPeriod {
@@ -46,6 +47,23 @@ impl HistoricalPeriod {
             HistoricalPeriod::ThreeYears => Duration::days(365 * 3),
             HistoricalPeriod::FiveYears => Duration::days(365 * 5),
             HistoricalPeriod::TenYears => Duration::days(365 * 10),
+        }
+    }
+}
+
+impl FromStr for HistoricalPeriod {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "1D" => Ok(HistoricalPeriod::OneDay),
+            "5D" => Ok(HistoricalPeriod::FiveDays),
+            "1M" => Ok(HistoricalPeriod::OneMonth),
+            "1Y" => Ok(HistoricalPeriod::OneYear),
+            "3Y" => Ok(HistoricalPeriod::ThreeYears),
+            "5Y" => Ok(HistoricalPeriod::FiveYears),
+            "10Y" => Ok(HistoricalPeriod::TenYears),
+            _ => Err(anyhow::anyhow!("Invalid historical period: {}", s)),
         }
     }
 }
