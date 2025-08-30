@@ -319,3 +319,81 @@ async fn test_real_amfi_api() {
         }
     }
 }
+
+#[test_log::test(tokio::test)]
+async fn test_rolling_returns_command() {
+    use chrono::{Duration, Utc};
+    use xmf::AppCommand;
+
+    let now = Utc::now();
+    let timestamps: Vec<i64> = (0..365)
+        .map(|i| (now - Duration::days(i)).timestamp())
+        .collect();
+    let prices: Vec<f64> = (0..365).map(|i| 100.0 + i as f64).collect();
+
+    let mock_response = format!(
+        r#"{{
+        "chart": {{
+            "result": [
+                {{
+                    "meta": {{
+                        "regularMarketPrice": 175.5,
+                        "currency": "USD"
+                    }},
+                    "timestamp": {:?},
+                    "indicators": {{
+                        "quote": [{{
+                            "close": {:?}
+                        }}]
+                    }}
+                }}
+            ]
+        }}
+    }}"#,
+        timestamps, prices
+    );
+
+    let mock_server = test_utils::create_mock_server("AAPL", &mock_response).await;
+
+    let config_file = tempfile::NamedTempFile::new().expect("Failed to create temp file");
+    let config_path = config_file.path();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_content = format!(
+        r#"{{
+        "portfolios": [
+          {{ "name": "Tech Stocks",
+            "investments": [
+              {{ "symbol": "AAPL",
+                "units": 10.5
+              }}
+            ]
+          }}
+        ],
+        "providers": {{
+          "yahoo": {{
+            "base_url": "{}"
+          }}
+        }},
+        "currency": "USD",
+        "data_path": "{}"
+    }}"#,
+        mock_server.uri(),
+        temp_dir.path().to_string_lossy().replace('\\', "\\\\")
+    );
+
+    fs::write(config_path, &config_content).expect("Failed to write config file");
+
+    let result = xmf::run_command(
+        AppCommand::Returns {
+            rolling_period: Some("1y".to_string()),
+        },
+        Some(config_path),
+        false,
+    )
+    .await;
+    assert!(
+        result.is_ok(),
+        "Main function failed with: {:?}",
+        result.err()
+    );
+}

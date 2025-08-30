@@ -12,7 +12,7 @@ use tracing::{debug, info};
 pub enum AppCommand {
     Summary,
     Change,
-    Returns,
+    Returns { rolling_period: Option<String> },
     Fees,
     Alloc,
     Setup,
@@ -77,13 +77,14 @@ pub async fn run_command(
                     )
                     .await
                 }
-                AppCommand::Returns => {
+                AppCommand::Returns { rolling_period } => {
                     cli::returns::run(
                         &config.portfolios,
                         &*symbol_provider,
                         &*isin_provider,
                         &*currency_provider,
                         &config.currency,
+                        rolling_period.as_deref(),
                     )
                     .await
                 }
