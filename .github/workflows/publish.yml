@@ -123,10 +123,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          assets=()
-          for asset in artifacts/*/*; do
-            assets+=("-a" "$asset")
-          done
-          if [ ${#assets[@]} -gt 0 ]; then
-            gh release upload "${{ needs.version.outputs.build_version }}" "${assets[@]}" --repo "${{ github.repository }}"
-          fi
+          gh release upload \
+            '${{ needs.version.outputs.build_version }}' \
+            artifacts/*/* \
+            --repo '${{ github.repository }}'
