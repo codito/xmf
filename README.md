@@ -24,6 +24,7 @@ A command-line application written in Rust for tracking your investment portfoli
 ### From Source
 
 1. Clone this repository:
+
    ```bash
    git clone https://github.com/codito/xmf.git
    cd xmf
@@ -41,12 +42,15 @@ Pre-built binaries for Linux, Windows, and macOS are available with each [releas
 ## Quick Start
 
 1. Initialize the configuration:
+
    ```bash
    xmf setup
    ```
+
    This creates a default configuration file at the appropriate location for your system.
 
 2. Edit the configuration file to add your investments:
+
    ```bash
    # Location varies by OS:
    # Linux: ~/.config/xmf/config.yaml
@@ -61,9 +65,12 @@ Pre-built binaries for Linux, Windows, and macOS are available with each [releas
 
 ## Configuration
 
-The configuration file uses YAML format and supports multiple portfolios. You can find a complete example configuration in [`docs/example_config.yaml`](docs/example_config.yaml).
+The configuration file uses YAML format and supports multiple portfolios. You
+can find a complete example configuration in
+[`docs/example_config.yaml`](docs/example_config.yaml).
 
-After running `xmf setup`, you'll get a configuration file with detailed comments explaining each section. Here's a minimal example:
+After running `xmf setup`, you'll get a configuration file with detailed
+comments explaining each section. Here's a minimal example:
 
 ```yaml
 portfolios:
@@ -81,10 +88,13 @@ portfolios:
     investments:
       - name: "Bank FD"
         value: 50000
-        currency: "INR"
+        currency: "INR" # will get converted to global currency
 
-currency: "USD"
+currency: "USD" # global currency is used for all reporting
 ```
+
+`xmf` supports multiple investment profiles with named configuration files.
+E.g., `xmf summary -n <config_name` will use the configuration `~/.config/xmf/config_name.yml`.
 
 ### Investment Types
 
@@ -109,7 +119,8 @@ providers:
 - `xmf setup`: Create a default configuration file
 - `xmf summary`: Display portfolio summary with current values
 - `xmf change`: Show price changes over different periods
-- `xmf returns`: Calculate CAGR (Compound Annual Growth Rate) for investments
+- `xmf returns`: Calculate CAGR (Compound Annual Growth Rate) for investments,
+  or rolling returns with `--rolling <period>`
 - `xmf fees`: Display expense ratios for mutual funds
 - `xmf alloc`: Show asset allocation breakdown by category
 
