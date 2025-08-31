@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/codito/xmf/compare/v0.2.0...v0.2.1) (2025-08-31)
+
+
+### Bug Fixes
+
+* gh release upload ([#33](https://github.com/codito/xmf/issues/33)) ([d263e17](https://github.com/codito/xmf/commit/d263e17b38b9ae17279a8542c822567b63020b33))
+
 ## [0.2.0](https://github.com/codito/xmf/compare/v0.1.0...v0.2.0) (2025-08-31)
 
 
