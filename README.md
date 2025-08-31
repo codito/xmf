@@ -1,6 +1,11 @@
 # xmf - A Simple Mutual Funds and Stocks Tracker
 
-A command-line application written in Rust for tracking your investment portfolios including stocks, mutual funds, and fixed deposits.
+A command-line application written in Rust for tracking your investment
+portfolios including stocks, mutual funds, and fixed deposits.
+
+![crates io](https://img.shields.io/crates/v/xmf)
+
+![xmf summary](./docs/xmf_summary.png)
 
 ## Features
 
@@ -18,6 +23,8 @@ A command-line application written in Rust for tracking your investment portfoli
   - CAGR (Compound Annual Growth Rate) calculations
   - Expense ratio tracking for mutual funds
   - Asset allocation breakdown by category
+
+[Screenshots](./docs)
 
 ## Installation
 
@@ -38,6 +45,36 @@ A command-line application written in Rust for tracking your investment portfoli
 ### Pre-built Binaries
 
 Pre-built binaries for Linux, Windows, and macOS are available with each [release](https://github.com/codito/xmf/releases).
+
+<details>
+<summary>Download script for Linux, MacOS and Windows</summary>
+
+**Download on Linux**
+
+```bash
+# Linux
+wget https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-linux.tar.gz \
+  && tar xvzf xmf-x86_64-linux.tar.gz && mv xmf-x86_64-linux xmf
+./xmf
+```
+
+**Download on MacOS**
+```bash
+# MacOS
+curl -L https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-macos.tar.gz \
+  -o xmf.tar.gz && tar xvzf xmf.tar.gz && mv xmf-x86_64-macos xmf
+./xmf
+```
+
+**Download on Windows**
+```powershell
+# Windows (PowerShell)
+Invoke-WebRequest -Uri "https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-windows.exe.zip" -OutFile "xmf.zip"
+Expand-Archive -Path "xmf.zip" -DestinationPath "."
+Rename-Item -Path "xmf-x86_64-windows.exe" -NewName "xmf.exe"
+xmf.exe
+```
+</details>
 
 ## Quick Start
 
