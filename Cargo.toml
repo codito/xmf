@@ -28,7 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 rust_finprim = "0.4.0"
 rust_decimal = "1"                                                  # Needed for rust_finprim::rate::cagr
-comfy-table = "7.1.4"
+comfy-table = "7.2.0"
 console = "0.16.0"
 indicatif = "0.18.0"
 chrono = { version = "0.4.41", features = ["serde"] }
