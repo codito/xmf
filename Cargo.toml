@@ -35,7 +35,7 @@ chrono = { version = "0.4.41", features = ["serde"] }
 fjall = "2.11.2"
 
 [dev-dependencies]
-tempfile = "3.8"
+tempfile = "3.21"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 wiremock = "0.6"
 test-log = { version = "0.2", features = ["trace"] }
