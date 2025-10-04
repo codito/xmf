@@ -40,7 +40,7 @@ pub async fn calculate_portfolio_value(
     price_results: &HashMap<String, Result<PriceResult>>,
     currency_provider: &(dyn CurrencyRateProvider + Send + Sync),
     target_currency: &str,
-    update_callback: &(dyn Fn()),
+    update_callback: &dyn Fn(),
 ) -> PortfolioValue {
     let mut holdings = PortfolioValue {
         name: portfolio.name.clone(),
