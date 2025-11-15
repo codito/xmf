@@ -350,6 +350,7 @@ mod tests {
                     "meta": {
                         "regularMarketPrice": 150.65,
                         "currency": "USD",
+                        "longName": "Apple Inc.",
                         "shortName": "Apple Inc."
                     }
                 }]
@@ -390,6 +391,7 @@ mod tests {
                         "meta": {{
                             "regularMarketPrice": {current_price},
                             "currency": "USD",
+                            "longName": "Apple Inc.",
                             "shortName": "Apple Inc."
                         }},
                         "timestamp": [{ts_5y}, {ts_1y}, {ts_1m}, {ts_5d}, {ts_prev}, {ts_curr}],
@@ -521,6 +523,7 @@ mod tests {
                         "meta": {{
                             "regularMarketPrice": {current_price},
                             "currency": "GBp",
+                            "longName": "UK STOCK PLC III",
                             "shortName": "UK STOCK PLC"
                         }},
                         "timestamp": [{ts_1y}, {ts_prev}, {ts_curr}],

@@ -1,5 +1,5 @@
 use super::ui;
-use crate::core::analytics;
+use crate::core::analytics::{self, PortfolioValue};
 use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
 use crate::core::metadata::MetadataProvider;
@@ -56,10 +56,7 @@ pub async fn run(
     let pb = ui::new_progress_bar(all_investments, true);
     pb.set_message("Calculating allocation...");
 
-    // Cache metadata for mutual funds
-    let mut metadata_cache: HashMap<String, String> = HashMap::new();
     let mut portfolio_values = Vec::new();
-
     for portfolio in portfolios {
         // Calculate portfolio value with conversions
         let portfolio_value = analytics::calculate_portfolio_value(
@@ -73,6 +70,8 @@ pub async fn run(
         portfolio_values.push(portfolio_value);
     }
 
+    let allocations = calculate_allocations(portfolios, &portfolio_values, metadata_provider).await;
+
     pb.finish_and_clear();
 
     // Display allocation for each portfolio
@@ -82,8 +81,37 @@ pub async fn run(
             continue;
         }
 
+        display_allocation_table(
+            &portfolios[i].name,
+            &allocations[i],
+            portfolio_value.total_converted_value,
+            target_currency,
+            &price_results,
+        );
+    }
+
+    Ok(())
+}
+
+async fn calculate_allocations(
+    portfolios: &[Portfolio],
+    portfolio_values: &[PortfolioValue],
+    metadata_provider: &(dyn MetadataProvider + Send + Sync),
+) -> Vec<HashMap<String, Vec<(Investment, f64)>>> {
+    let mut portfolio_categories: Vec<HashMap<String, Vec<(Investment, f64)>>> = Vec::new();
+
+    // Cache metadata for mutual funds
+    let mut metadata_cache: HashMap<String, String> = HashMap::new();
+
+    // Display allocation for each portfolio
+    for (i, portfolio_value) in portfolio_values.iter().enumerate() {
+        // Skip empty portfolios
+        if portfolio_value.investments.is_empty() {
+            continue;
+        }
+
         // Accumulate investments by category (using raw fund_category strings)
-        let mut categories: HashMap<String, Vec<(&Investment, f64)>> = HashMap::new();
+        portfolio_categories.push(HashMap::new());
         let portfolio = &portfolios[i];
 
         for (investment, value) in portfolio
@@ -93,10 +121,14 @@ pub async fn run(
         {
             if let Some(v) = value.converted_value {
                 let category = match investment {
-                    Investment::Stock(_) => "Equity".to_string(),
-                    Investment::FixedDeposit(_) => "Debt".to_string(),
+                    Investment::Stock(s) => s.category.clone().unwrap_or("Equity".to_string()),
+                    Investment::FixedDeposit(fd) => {
+                        fd.category.clone().unwrap_or("Debt".to_string())
+                    }
                     Investment::MutualFund(mf) => {
-                        if let Some(cat) = metadata_cache.get(&mf.isin) {
+                        if let Some(cat) = &mf.category {
+                            cat.clone()
+                        } else if let Some(cat) = metadata_cache.get(&mf.isin) {
                             cat.clone()
                         } else {
                             let fetched_category =
@@ -109,28 +141,25 @@ pub async fn run(
                         }
                     }
                 };
-                categories
+                portfolio_categories[i]
                     .entry(category)
                     .or_default()
-                    .push((investment, v));
+                    .push((investment.clone(), v));
             }
         }
 
-        display_allocation_table(
-            &portfolio.name,
-            categories,
-            portfolio_value.total_converted_value,
-            target_currency,
-            &price_results,
-        );
+        // Within category, sort investments by value (descending)
+        portfolio_categories[i].iter_mut().for_each(|(_, v)| {
+            v.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
+        });
     }
 
-    Ok(())
+    portfolio_categories
 }
 
 fn display_allocation_table(
     portfolio_name: &str,
-    allocation: HashMap<String, Vec<(&Investment, f64)>>,
+    allocation: &HashMap<String, Vec<(Investment, f64)>>,
     total_value: Option<f64>,
     target_currency: &str,
     price_results: &HashMap<String, Result<PriceResult>>,
@@ -152,7 +181,7 @@ fn display_allocation_table(
     });
 
     // Convert to Vec for sorting
-    let mut categories: Vec<_> = allocation.into_iter().collect();
+    let mut categories: Vec<_> = allocation.iter().collect();
     // Sort by total category value (descending)
     categories.sort_by(|(_, a), (_, b)| {
         let a_total: f64 = a.iter().map(|(_, v)| v).sum();
@@ -161,9 +190,6 @@ fn display_allocation_table(
     });
 
     for (category, investments) in &mut categories {
-        // Within category, sort investments by value (descending)
-        investments.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-
         // Calculate category total
         let category_total: f64 = investments.iter().map(|(_, v)| v).sum();
         let category_percentage = if total > 0.0 {
@@ -181,7 +207,7 @@ fn display_allocation_table(
         ]);
 
         // Display investments in this category
-        for (investment, value) in investments {
+        for (investment, value) in investments.iter() {
             let display_name = match investment {
                 Investment::Stock(stock) => price_results
                     .get(&stock.symbol)
@@ -323,19 +349,23 @@ mod tests {
                 Investment::Stock(StockInvestment {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
+                    category: None,
                 }),
                 Investment::MutualFund(MutualFundInvestment {
                     isin: "EQUITY_FUND".to_string(),
                     units: 100.0,
+                    category: None,
                 }),
                 Investment::MutualFund(MutualFundInvestment {
                     isin: "DEBT_FUND".to_string(),
                     units: 50.0,
+                    category: None,
                 }),
                 Investment::FixedDeposit(FixedDepositInvestment {
                     name: "My FD".to_string(),
                     value: 5000.0,
                     currency: Some("USD".to_string()),
+                    category: None,
                 }),
             ],
         }];
