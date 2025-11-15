@@ -328,6 +328,7 @@ mod tests {
             investments: vec![Investment::Stock(StockInvestment {
                 symbol: "AAPL".to_string(),
                 units: 10.0,
+                category: None,
             })],
         };
         let holdings = calculate_portfolio_value(
@@ -375,10 +376,12 @@ mod tests {
                 Investment::Stock(StockInvestment {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
+                    category: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "MSFT".to_string(),
                     units: 5.0,
+                    category: None,
                 }),
             ],
         };
@@ -433,10 +436,12 @@ mod tests {
                 Investment::Stock(StockInvestment {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
+                    category: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "RY".to_string(),
                     units: 10.0,
+                    category: None,
                 }),
             ],
         };
@@ -477,6 +482,7 @@ mod tests {
                 name: "My FD".to_string(),
                 value: 5000.0,
                 currency: Some("INR".to_string()),
+                category: None,
             })],
         };
 

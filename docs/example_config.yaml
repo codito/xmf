@@ -17,6 +17,7 @@ portfolios:
       # Mutual fund investments require an ISIN and number of units
       - isin: "INF179KB1HU9" # Example ISIN for a mutual fund
         units: 100.0
+        category: "hybrid" # Optional - override mutual fund metadata category
 
   - name: "Fixed Deposits"
     investments:
