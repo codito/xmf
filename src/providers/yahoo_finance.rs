@@ -127,7 +127,7 @@ struct PriceChartMeta {
     #[serde(alias = "regularMarketPrice")]
     regular_market_price: f64,
     currency: String,
-    #[serde(alias = "shortName")]
+    #[serde(alias = "longName")] // full name of the ticker
     short_name: Option<String>,
 }
 
