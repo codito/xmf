@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/codito/xmf/compare/v0.2.1...v0.3.0) (2025-12-07)
+
+
+### Features
+
+* custom categories for investments ([#61](https://github.com/codito/xmf/issues/61)) ([62bd419](https://github.com/codito/xmf/commit/62bd419e797cc6420aa1b046aebc2c33e538eb6a))
+
+
+### Bug Fixes
+
+* right align numbers for better readability ([#66](https://github.com/codito/xmf/issues/66)) ([c099bcd](https://github.com/codito/xmf/commit/c099bcdd0ff96c2b936c3f64d629355b06744bbf))
+
 ## [0.2.1](https://github.com/codito/xmf/compare/v0.2.0...v0.2.1) (2025-08-31)
 
 
