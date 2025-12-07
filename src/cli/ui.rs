@@ -1,6 +1,6 @@
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
-use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
+use comfy_table::{Attribute, Cell, CellAlignment, Color, ContentArrangement, Table};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -44,16 +44,33 @@ pub fn header_cell(text: &str) -> Cell {
 
 /// Formats an `Option<T>` into a `Cell`. `None` is displayed as "N/A".
 pub fn format_optional_cell<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
-    value.map_or(Cell::new("N/A").fg(Color::Red), |v| Cell::new(format_fn(v)))
+    value.map_or(
+        Cell::new("N/A")
+            .fg(Color::DarkGrey)
+            .set_alignment(CellAlignment::Right),
+        |v| Cell::new(format_fn(v)).set_alignment(CellAlignment::Right),
+    )
+}
+
+/// Formats a cell with bold and green text
+pub fn format_percentage_cell(value: f64, format_fn: impl Fn(f64) -> String) -> Cell {
+    Cell::new(format_fn(value))
+        .add_attribute(Attribute::Bold)
+        .fg(Color::Green)
+        .set_alignment(CellAlignment::Right)
 }
 
 /// Creates a cell for displaying percentage change with color coding.
 pub fn change_cell(change: f64) -> Cell {
     let text = format!("{change:.2}%");
     if change >= 0.0 {
-        Cell::new(text).fg(Color::Green)
+        Cell::new(text)
+            .fg(Color::Green)
+            .set_alignment(CellAlignment::Right)
     } else {
-        Cell::new(text).fg(Color::Red)
+        Cell::new(text)
+            .fg(Color::Red)
+            .set_alignment(CellAlignment::Right)
     }
 }
 
@@ -92,11 +109,4 @@ pub fn print_separator() {
         .map(|(_, w)| w as usize)
         .unwrap_or(80);
     println!("\n{}", "─".repeat(term_width));
-}
-
-/// Formats a percentage value into a styled cell
-pub fn format_percentage_cell(value: f64) -> Cell {
-    Cell::new(format!("{value:.2}%"))
-        .add_attribute(Attribute::Bold)
-        .fg(Color::Green)
 }
