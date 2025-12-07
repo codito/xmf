@@ -194,8 +194,8 @@ fn display_results(result: &PortfolioFeeResult) {
 
     table.set_header(vec![
         ui::header_cell("Investment"),
-        ui::header_cell("Expense Ratio"),
-        ui::header_cell("Weight"),
+        ui::header_cell("Expense Ratio (%)"),
+        ui::header_cell("Weight (%)"),
     ]);
 
     for fee_result in &result.investment_fees {
@@ -208,13 +208,13 @@ fn display_results(result: &PortfolioFeeResult) {
         let expense_cell = if let Some(err) = &fee_result.error {
             Cell::new(format!("Error: {err}")).fg(comfy_table::Color::Red)
         } else {
-            Cell::new(format!("{:.2}%", fee_result.expense_ratio))
+            ui::format_optional_cell(Some(fee_result.expense_ratio), |v| format!("{:.2}", v))
         };
 
         table.add_row(vec![
             Cell::new(name_display),
             expense_cell,
-            Cell::new(format!("{:.1}%", fee_result.weight)),
+            ui::format_optional_cell(Some(fee_result.weight), |v| format!("{:.2}", v)),
         ]);
     }
 
@@ -222,8 +222,10 @@ fn display_results(result: &PortfolioFeeResult) {
     if !result.investment_fees.is_empty() {
         table.add_row(vec![
             Cell::new("Portfolio Weighted").add_attribute(Attribute::Bold),
-            ui::format_percentage_cell(result.portfolio_fee),
-            Cell::new("100.0%").add_attribute(Attribute::Bold),
+            ui::format_percentage_cell(result.portfolio_fee, |v| format!("{:.2}", v)),
+            Cell::new("100.0")
+                .add_attribute(Attribute::Bold)
+                .set_alignment(comfy_table::CellAlignment::Right),
         ]);
     }
 
