@@ -31,7 +31,7 @@ rust_decimal = "1"                                                  # Needed for
 comfy-table = "7.2.1"
 console = "0.16.2"
 indicatif = "0.18.3"
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.43", features = ["serde"] }
 fjall = "2.11.2"
 
 [dev-dependencies]
