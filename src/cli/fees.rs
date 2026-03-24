@@ -194,8 +194,8 @@ fn display_results(result: &PortfolioFeeResult) {
 
     table.set_header(vec![
         ui::header_cell("Investment"),
-        ui::header_cell("Expense Ratio (%)"),
-        ui::header_cell("Weight (%)"),
+        ui::header_cell("Expense Ratio"),
+        ui::header_cell("Weight"),
     ]);
 
     for fee_result in &result.investment_fees {
@@ -222,7 +222,7 @@ fn display_results(result: &PortfolioFeeResult) {
     if !result.investment_fees.is_empty() {
         table.add_row(vec![
             Cell::new("Portfolio Weighted").add_attribute(Attribute::Bold),
-            ui::format_percentage_cell(result.portfolio_fee, |v| format!("{:.2}", v)),
+            ui::format_percentage_cell(result.portfolio_fee, |v| format!("{:.2}%", v)),
             Cell::new("100.0")
                 .add_attribute(Attribute::Bold)
                 .set_alignment(comfy_table::CellAlignment::Right),
