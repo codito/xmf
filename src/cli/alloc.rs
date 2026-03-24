@@ -168,7 +168,7 @@ fn display_allocation_table(
     table.set_header(vec![
         ui::header_cell("Category"),
         ui::header_cell("Investment"),
-        ui::header_cell("Allocation (%)"),
+        ui::header_cell("Allocation"),
         ui::header_cell(&format!("Value ({})", target_currency)),
     ]);
 
@@ -202,7 +202,7 @@ fn display_allocation_table(
         table.add_row(vec![
             Cell::new(&category),
             Cell::new(""),
-            ui::format_percentage_cell(category_percentage, |v| format!("{:.2}", v)),
+            ui::format_percentage_cell(category_percentage, |v| format!("{:.2}%", v)),
             ui::format_optional_cell(Some(category_total), |v| format!("{:.2}", v)),
         ]);
 
@@ -231,7 +231,7 @@ fn display_allocation_table(
             table.add_row(vec![
                 Cell::new(""),
                 Cell::new(display_name),
-                ui::format_optional_cell(Some(allocation_perc), |v| format!("{:.2}", v)),
+                ui::format_optional_cell(Some(allocation_perc), |v| format!("{:.2}%", v)),
                 ui::format_optional_cell(Some(*value), |v| format!("{:.2}", v)),
             ]);
         }

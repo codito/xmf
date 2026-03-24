@@ -19,6 +19,26 @@ fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]
         .and_then(|index| prices.get(index).and_then(|p| *p))
 }
 
+fn find_prev_close(timestamps: &[i64], closes: &[Option<f64>]) -> Option<f64> {
+    if timestamps.is_empty() || closes.is_empty() {
+        return None;
+    }
+
+    let reference_date = Utc
+        .timestamp_opt(*timestamps.last()?, 0)
+        .single()?
+        .date_naive();
+    for i in (0..timestamps.len() - 1).rev() {
+        if let Some(ts) = Utc.timestamp_opt(*timestamps.get(i)?, 0).single()
+            && ts.date_naive() < reference_date
+            && let Some(close) = closes.get(i).and_then(|c| *c)
+        {
+            return Some(close);
+        }
+    }
+    None
+}
+
 fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalPeriod, f64> {
     let mut historical_prices = HashMap::new();
 
@@ -38,11 +58,7 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             None => return historical_prices,
         };
 
-        // For 1-day period: use the second last element (previous day's close)
-        // Last element is today's current price, second last is previous close
-        if closes.len() >= 2
-            && let Some(prev_close) = closes.get(closes.len() - 2).copied().flatten()
-        {
+        if let Some(prev_close) = find_prev_close(timestamps, closes) {
             historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
 
@@ -489,6 +505,54 @@ mod tests {
                 .date_naive();
             assert_eq!(*date, expected_date);
         }
+    }
+
+    #[tokio::test]
+    async fn test_find_prev_close_market_closed() {
+        let now = chrono::Utc::now();
+
+        let ts_5 = (now - chrono::Duration::days(5)).timestamp();
+        let ts_4 = (now - chrono::Duration::days(4)).timestamp();
+        let ts_3 = (now - chrono::Duration::days(3)).timestamp();
+        let ts_2 = (now - chrono::Duration::days(2)).timestamp();
+        let ts_1 = (now - chrono::Duration::days(1)).timestamp();
+        let ts_0 = now.timestamp();
+
+        let p_5 = 100.0;
+        let p_4 = 102.0;
+        let p_3 = 101.0;
+        let p_2 = 103.0;
+        let p_1 = 105.0;
+        let current_price = 105.0;
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": {current_price},
+                            "currency": "USD",
+                            "longName": "Test Corp",
+                            "shortName": "Test Corp"
+                        }},
+                        "timestamp": [{ts_5}, {ts_4}, {ts_3}, {ts_2}, {ts_1}, {ts_0}],
+                        "indicators": {{
+                            "quote": [{{
+                                "close": [{p_5}, {p_4}, {p_3}, {p_2}, {p_1}, {current_price}]
+                            }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+        );
+
+        let mock_server = create_mock_server("TEST", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("TEST").await.unwrap();
+
+        assert_eq!(result.historical_prices[&HistoricalPeriod::OneDay], p_1);
     }
 
     #[tokio::test]

@@ -20,7 +20,7 @@ impl PortfolioValue {
             ui::header_cell("Units"),
             ui::header_cell("Price"),
             ui::header_cell(&format!("Value ({target_currency})")),
-            ui::header_cell("Weight (%)"),
+            ui::header_cell("Weight"),
         ]);
 
         for investment in &self.investments {
