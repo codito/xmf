@@ -42,14 +42,22 @@ pub fn header_cell(text: &str) -> Cell {
         .add_attribute(Attribute::Bold)
 }
 
+/// Formats an `Option<T>` into a right-aligned `Cell`. The caller controls
+/// the displayed text (including empty/error states) via `format_fn`.
+pub fn format_cell<T>(value: Option<T>, format_fn: impl Fn(Option<&T>) -> String) -> Cell {
+    let text = format_fn(value.as_ref());
+    let mut cell = Cell::new(text).set_alignment(CellAlignment::Right);
+    if value.is_none() {
+        cell = cell.fg(Color::DarkGrey);
+    }
+    cell
+}
+
 /// Formats an `Option<T>` into a `Cell`. `None` is displayed as "N/A".
-pub fn format_optional_cell<T>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
-    value.map_or(
-        Cell::new("N/A")
-            .fg(Color::DarkGrey)
-            .set_alignment(CellAlignment::Right),
-        |v| Cell::new(format_fn(v)).set_alignment(CellAlignment::Right),
-    )
+pub fn format_optional_cell<T: Clone>(value: Option<T>, format_fn: impl Fn(T) -> String) -> Cell {
+    format_cell(value, |opt| {
+        opt.map_or_else(|| "N/A".to_string(), |v| format_fn(v.clone()))
+    })
 }
 
 /// Formats a cell with bold and green text
@@ -109,4 +117,35 @@ pub fn print_separator() {
         .map(|(_, w)| w as usize)
         .unwrap_or(80);
     println!("\n{}", "─".repeat(term_width));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_format_cell_some() {
+        let cell = format_cell(Some(42.5f64), |opt| {
+            opt.map_or("N/A".to_string(), |v| format!("{v:.1}"))
+        });
+        assert_eq!(cell.content(), "42.5");
+    }
+
+    #[test]
+    fn test_format_cell_none_custom_text() {
+        let cell = format_cell::<f64>(None, |_| "N/A ".to_string());
+        assert_eq!(cell.content(), "N/A ");
+    }
+
+    #[test]
+    fn test_format_optional_cell_some() {
+        let cell = format_optional_cell(Some(42.5f64), |v| format!("{v:.1}"));
+        assert_eq!(cell.content(), "42.5");
+    }
+
+    #[test]
+    fn test_format_optional_cell_none() {
+        let cell = format_optional_cell::<f64>(None, |_| unreachable!());
+        assert_eq!(cell.content(), "N/A");
+    }
 }

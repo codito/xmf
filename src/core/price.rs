@@ -101,7 +101,67 @@ pub struct PriceResult {
     pub short_name: Option<String>,
 }
 
+impl PriceResult {
+    pub fn as_of_date(&self) -> Option<NaiveDate> {
+        self.daily_prices.iter().map(|(d, _)| d).max().copied()
+    }
+}
+
 #[async_trait]
 pub trait PriceProvider: Send + Sync {
     async fn fetch_price(&self, symbol: &str) -> Result<PriceResult>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_as_of_date_with_daily_prices() {
+        let result = PriceResult {
+            price: 150.0,
+            currency: "USD".to_string(),
+            historical_prices: HashMap::new(),
+            daily_prices: vec![
+                (NaiveDate::from_ymd_opt(2026, 6, 25).unwrap(), 145.0),
+                (NaiveDate::from_ymd_opt(2026, 6, 26).unwrap(), 148.0),
+                (NaiveDate::from_ymd_opt(2026, 6, 27).unwrap(), 150.0),
+            ],
+            short_name: None,
+        };
+        assert_eq!(
+            result.as_of_date(),
+            Some(NaiveDate::from_ymd_opt(2026, 6, 27).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_as_of_date_empty() {
+        let result = PriceResult {
+            price: 150.0,
+            currency: "USD".to_string(),
+            historical_prices: HashMap::new(),
+            daily_prices: Vec::new(),
+            short_name: None,
+        };
+        assert_eq!(result.as_of_date(), None);
+    }
+
+    #[test]
+    fn test_as_of_date_unsorted() {
+        let result = PriceResult {
+            price: 150.0,
+            currency: "USD".to_string(),
+            historical_prices: HashMap::new(),
+            daily_prices: vec![
+                (NaiveDate::from_ymd_opt(2026, 6, 27).unwrap(), 150.0),
+                (NaiveDate::from_ymd_opt(2026, 6, 25).unwrap(), 145.0),
+            ],
+            short_name: None,
+        };
+        assert_eq!(
+            result.as_of_date(),
+            Some(NaiveDate::from_ymd_opt(2026, 6, 27).unwrap())
+        );
+    }
 }

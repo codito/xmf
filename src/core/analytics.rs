@@ -3,6 +3,7 @@ use crate::core::config::{Investment, Portfolio};
 use crate::core::currency::CurrencyRateProvider;
 use crate::core::price::{HistoricalPeriod, PriceResult};
 use anyhow::{Result, anyhow};
+use chrono::NaiveDate;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -18,6 +19,7 @@ pub struct InvestmentValue {
     pub converted_value: Option<f64>,
     pub weight: Option<f64>,
     pub error: Option<String>,
+    pub as_of_date: Option<NaiveDate>,
 }
 
 /// Represents a summary of a portfolio's holdings, with all values
@@ -76,6 +78,7 @@ pub async fn calculate_portfolio_value(
             converted_value: None,
             weight: None,
             error: None,
+            as_of_date: None,
         };
 
         if needs_fetch {
@@ -86,6 +89,7 @@ pub async fn calculate_portfolio_value(
                     holding.value = Some(value);
                     holding.value_currency = Some(price_data.currency.clone());
                     holding.short_name = price_data.short_name.clone();
+                    holding.as_of_date = price_data.as_of_date();
                 }
                 Some(Err(e)) => {
                     all_valid = false;
@@ -312,13 +316,14 @@ mod tests {
     async fn test_valid_single_investment() {
         let currency_provider = MockCurrencyProvider::new();
         let mut price_results = HashMap::new();
+        let as_of = NaiveDate::from_ymd_opt(2026, 6, 27).unwrap();
         price_results.insert(
             "AAPL".to_string(),
             Ok(PriceResult {
                 price: 150.0,
                 currency: "USD".to_string(),
                 historical_prices: HashMap::new(),
-                daily_prices: Vec::new(),
+                daily_prices: vec![(as_of, 150.0)],
                 short_name: Some("Apple Inc.".to_string()),
             }),
         );
@@ -352,6 +357,7 @@ mod tests {
             holdings.investments[0].short_name,
             Some("Apple Inc.".to_string())
         );
+        assert_eq!(holdings.investments[0].as_of_date, Some(as_of));
     }
 
     #[tokio::test]

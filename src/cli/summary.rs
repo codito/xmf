@@ -4,14 +4,60 @@ use crate::core::{
     CurrencyRateProvider, PriceProvider, PriceResult, analytics, analytics::PortfolioValue,
 };
 use anyhow::Result;
+use chrono::NaiveDate;
 use comfy_table::Cell;
 use console::style;
 use futures::future::join_all;
 use std::collections::HashMap;
 
+fn to_superscript(n: usize) -> String {
+    n.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '\u{2070}',
+            '1' => '\u{00B9}',
+            '2' => '\u{00B2}',
+            '3' => '\u{00B3}',
+            '4' => '\u{2074}',
+            '5' => '\u{2075}',
+            '6' => '\u{2076}',
+            '7' => '\u{2077}',
+            '8' => '\u{2078}',
+            '9' => '\u{2079}',
+            _ => c,
+        })
+        .collect()
+}
+
 impl PortfolioValue {
     pub fn display_as_table(&self) -> String {
         let target_currency = &self.target_currency;
+
+        // Find the latest as_of_date across all investments
+        let all_dates: Vec<NaiveDate> = self
+            .investments
+            .iter()
+            .filter_map(|i| i.as_of_date)
+            .collect();
+        let latest_date = all_dates.iter().max().copied();
+
+        // Collect stale dates (< latest_date), deduplicate, sort newest-first
+        let stale_dates: Vec<NaiveDate> = if let Some(latest) = latest_date {
+            let mut dates: Vec<NaiveDate> =
+                all_dates.iter().filter(|&&d| d < latest).copied().collect();
+            dates.sort();
+            dates.dedup();
+            dates.reverse();
+            dates
+        } else {
+            Vec::new()
+        };
+
+        let superscript_map: HashMap<NaiveDate, String> = stale_dates
+            .iter()
+            .enumerate()
+            .map(|(i, &date)| (date, to_superscript(i + 1)))
+            .collect();
 
         let mut table = ui::new_styled_table();
 
@@ -37,8 +83,27 @@ impl PortfolioValue {
             };
 
             let units = ui::format_optional_cell(investment.units, |u| format!("{u:.2}"));
-            let current_price =
-                ui::format_optional_cell(investment.price, |p| format!("{p:.2}{currency}"));
+
+            let sup = investment.as_of_date.and_then(|d| superscript_map.get(&d));
+            let has_any_superscript = !stale_dates.is_empty();
+            let current_price = ui::format_cell(investment.price, |opt| match opt {
+                Some(p) => {
+                    let mut s = format!("{p:.2}{currency}");
+                    if let Some(sup) = sup {
+                        s.push_str(sup);
+                    } else if has_any_superscript {
+                        s.push(' ');
+                    }
+                    s
+                }
+                None => {
+                    let mut s = "N/A".to_string();
+                    if has_any_superscript {
+                        s.push(' ');
+                    }
+                    s
+                }
+            });
             let converted_value =
                 ui::format_optional_cell(investment.converted_value, |v| format!("{v:.2}"));
             let weight_pct = ui::format_optional_cell(investment.weight, |w| format!("{w:.2}%"));
@@ -76,6 +141,26 @@ impl PortfolioValue {
             ui::style_text(target_currency, ui::StyleType::TotalLabel),
             ui::style_text(&total_converted_value, total_style_type)
         ));
+
+        if let Some(latest) = latest_date {
+            if !stale_dates.is_empty() {
+                let markers: String = stale_dates
+                    .iter()
+                    .map(|d| {
+                        let sup = &superscript_map[d];
+                        format!(" {}{}", sup, d.format("%Y-%m-%d"))
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
+                output.push_str(&format!(
+                    "\nData as of:{}; others {}",
+                    markers,
+                    latest.format("%Y-%m-%d")
+                ));
+            } else {
+                output.push_str(&format!("\nData as of: {}", latest.format("%Y-%m-%d")));
+            }
+        }
 
         output
     }
@@ -177,4 +262,31 @@ pub async fn run(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::to_superscript;
+
+    #[test]
+    fn test_to_superscript_digits() {
+        assert_eq!(to_superscript(0), "⁰");
+        assert_eq!(to_superscript(1), "¹");
+        assert_eq!(to_superscript(2), "²");
+        assert_eq!(to_superscript(3), "³");
+        assert_eq!(to_superscript(4), "⁴");
+        assert_eq!(to_superscript(5), "⁵");
+        assert_eq!(to_superscript(6), "⁶");
+        assert_eq!(to_superscript(7), "⁷");
+        assert_eq!(to_superscript(8), "⁸");
+        assert_eq!(to_superscript(9), "⁹");
+    }
+
+    #[test]
+    fn test_to_superscript_multi_digit() {
+        assert_eq!(to_superscript(10), "¹⁰");
+        assert_eq!(to_superscript(42), "⁴²");
+        assert_eq!(to_superscript(100), "¹⁰⁰");
+        assert_eq!(to_superscript(2026), "²⁰²⁶");
+    }
 }
