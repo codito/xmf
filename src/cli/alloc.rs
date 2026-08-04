@@ -350,6 +350,7 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::MutualFund(MutualFundInvestment {
                     isin: "EQUITY_FUND".to_string(),

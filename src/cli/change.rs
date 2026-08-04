@@ -259,11 +259,13 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 10.0, // value 1000
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "GOOG".to_string(),
                     units: 5.0, // value 1000
                     category: None,
+                    expense_ratio: None,
                 }),
             ],
         };
@@ -318,11 +320,13 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 15.0, // value 1500 (75% weight)
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "GOOG".to_string(),
                     units: 2.5, // value 500 (25% weight)
                     category: None,
+                    expense_ratio: None,
                 }),
             ],
         };
@@ -368,11 +372,13 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 10.0, // value 1000 (50% weight)
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "GOOG".to_string(),
                     units: 5.0, // value 1000 (50% weight)
                     category: None,
+                    expense_ratio: None,
                 }),
             ],
         };

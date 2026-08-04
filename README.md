@@ -21,7 +21,7 @@ portfolios including stocks, mutual funds, and fixed deposits.
   - Current portfolio value and allocation
   - Price change tracking over different periods
   - CAGR (Compound Annual Growth Rate) calculations
-  - Expense ratio tracking for mutual funds
+  - Expense ratio tracking for mutual funds and ETFs
   - Asset allocation breakdown by category
 
 [Screenshots](./docs)
@@ -38,6 +38,7 @@ portfolios including stocks, mutual funds, and fixed deposits.
    ```
 
 2. Build and install using Cargo:
+
    ```bash
    cargo install --path .
    ```
@@ -59,6 +60,7 @@ wget https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-linux.tar
 ```
 
 **Download on MacOS**
+
 ```bash
 # MacOS
 curl -L https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-macos.tar.gz \
@@ -67,6 +69,7 @@ curl -L https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-macos.
 ```
 
 **Download on Windows**
+
 ```powershell
 # Windows (PowerShell)
 Invoke-WebRequest -Uri "https://github.com/codito/xmf/releases/latest/download/xmf-x86_64-windows.exe.zip" -OutFile "xmf.zip"
@@ -74,6 +77,7 @@ Expand-Archive -Path "xmf.zip" -DestinationPath "."
 Rename-Item -Path "xmf-x86_64-windows.exe" -NewName "xmf.exe"
 xmf.exe
 ```
+
 </details>
 
 ## Quick Start
@@ -96,6 +100,7 @@ xmf.exe
    ```
 
 3. View your portfolio summary:
+
    ```bash
    xmf summary
    ```
@@ -138,6 +143,15 @@ E.g., `xmf summary -n <config_name` will use the configuration `~/.config/xmf/co
 1. **Stocks**: Use the `symbol` field with a Yahoo Finance ticker symbol
 2. **Mutual Funds**: Use the `isin` field with the fund's ISIN code
 3. **Fixed Deposits**: Use `name`, `value`, and optionally `currency`
+
+Stock/ETF investments can optionally specify an annual `expense_ratio` (in
+percent) which is included in the `xmf fees` report:
+
+```yaml
+- symbol: "VOO" # Vanguard S&P 500 ETF
+  units: 4
+  expense_ratio: 0.03
+```
 
 ### Providers Configuration
 

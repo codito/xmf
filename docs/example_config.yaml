@@ -9,8 +9,9 @@ portfolios:
       # Stock investments require a symbol and number of units
       - symbol: "AAPL" # Apple Inc.
         units: 10.0
-      - symbol: "MSFT" # Microsoft Corporation
-        units: 5.0
+      - symbol: "VOO" # Vanguard S&P 500 ETF
+        units: 4.0
+        expense_ratio: 0.03 # Optional - annual expense ratio in %, shown by `xmf fees`
 
   - name: "Mutual Funds"
     investments:

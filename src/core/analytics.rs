@@ -334,6 +334,7 @@ mod tests {
                 symbol: "AAPL".to_string(),
                 units: 10.0,
                 category: None,
+                expense_ratio: None,
             })],
         };
         let holdings = calculate_portfolio_value(
@@ -383,11 +384,13 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "MSFT".to_string(),
                     units: 5.0,
                     category: None,
+                    expense_ratio: None,
                 }),
             ],
         };
@@ -443,11 +446,13 @@ mod tests {
                     symbol: "AAPL".to_string(),
                     units: 10.0,
                     category: None,
+                    expense_ratio: None,
                 }),
                 Investment::Stock(StockInvestment {
                     symbol: "RY".to_string(),
                     units: 10.0,
                     category: None,
+                    expense_ratio: None,
                 }),
             ],
         };

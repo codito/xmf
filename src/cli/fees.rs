@@ -164,6 +164,8 @@ async fn calculate_portfolio_fees(
                 Ok(meta) => expense_ratio = meta.expense_ratio,
                 Err(e) => error = Some(e.to_string()),
             }
+        } else if let Investment::Stock(stock) = investment {
+            expense_ratio = stock.expense_ratio.unwrap_or(0.0);
         }
 
         total_weight += weight;
@@ -230,4 +232,75 @@ fn display_results(result: &PortfolioFeeResult) {
     }
 
     println!("{table}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::analytics::{InvestmentValue, PortfolioValue};
+
+    fn portfolio_with_stocks() -> Portfolio {
+        Portfolio {
+            name: "ETFs".to_string(),
+            investments: vec![
+                Investment::Stock(crate::core::config::StockInvestment {
+                    symbol: "VOO".to_string(),
+                    units: 4.0,
+                    category: None,
+                    expense_ratio: Some(0.03),
+                }),
+                Investment::Stock(crate::core::config::StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0,
+                    category: None,
+                    expense_ratio: None,
+                }),
+            ],
+        }
+    }
+
+    fn holdings_for(portfolio: &Portfolio) -> PortfolioValue {
+        PortfolioValue {
+            name: portfolio.name.clone(),
+            investments: portfolio
+                .investments
+                .iter()
+                .map(|inv| {
+                    let identifier = match inv {
+                        Investment::Stock(s) => s.symbol.clone(),
+                        Investment::MutualFund(mf) => mf.isin.clone(),
+                        Investment::FixedDeposit(fd) => fd.name.clone(),
+                    };
+                    InvestmentValue {
+                        identifier,
+                        short_name: None,
+                        units: None,
+                        price: None,
+                        value: None,
+                        value_currency: None,
+                        converted_value: Some(1000.0),
+                        weight: Some(0.5),
+                        error: None,
+                        as_of_date: None,
+                    }
+                })
+                .collect(),
+            total_converted_value: Some(2000.0),
+            target_currency: "USD".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stock_expense_ratio_from_config() {
+        let portfolio = portfolio_with_stocks();
+        let holdings = holdings_for(&portfolio);
+        let metadata_results = HashMap::new();
+
+        let result = calculate_portfolio_fees(&portfolio, &holdings, &metadata_results).await;
+
+        assert_eq!(result.investment_fees[0].expense_ratio, 0.03);
+        assert_eq!(result.investment_fees[1].expense_ratio, 0.0);
+        // Weighted fee: (0.03 * 0.5 + 0.0 * 0.5) / 100 = 0.00015
+        assert!((result.portfolio_fee - 0.00015).abs() < f64::EPSILON);
+    }
 }

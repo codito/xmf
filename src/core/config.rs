@@ -9,6 +9,9 @@ pub struct StockInvestment {
     pub symbol: String,
     pub units: f64,
     pub category: Option<String>,
+    /// Annual expense ratio in percent (e.g. 0.03 for 0.03%). Optional, used by `xmf fees` for ETFs.
+    #[serde(default)]
+    pub expense_ratio: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -160,6 +163,7 @@ currency: "USD"
             assert_eq!(s.symbol, "MSFT");
             assert_eq!(s.units, 5.0);
             assert_eq!(s.category, Some("intl".to_string()));
+            assert_eq!(s.expense_ratio, None);
         } else {
             panic!("Expected a stock investment");
         }
@@ -233,5 +237,31 @@ currency: "EUR"
             "http://example.com/amfi"
         );
         assert_eq!(config_with_providers.currency, "EUR");
+    }
+
+    #[test]
+    fn test_stock_investment_expense_ratio() {
+        let yaml_str = r#"
+portfolios:
+  - name: "ETFs"
+    investments:
+      - symbol: "VOO"
+        units: 4.0
+        expense_ratio: 0.03
+      - symbol: "AAPL"
+        units: 10.0
+currency: "USD"
+"#;
+        let config: AppConfig = serde_yaml::from_str(yaml_str).expect("Failed to deserialize");
+        if let Investment::Stock(s) = &config.portfolios[0].investments[0] {
+            assert_eq!(s.expense_ratio, Some(0.03));
+        } else {
+            panic!("Expected a stock investment");
+        }
+        if let Investment::Stock(s) = &config.portfolios[0].investments[1] {
+            assert_eq!(s.expense_ratio, None);
+        } else {
+            panic!("Expected a stock investment");
+        }
     }
 }
