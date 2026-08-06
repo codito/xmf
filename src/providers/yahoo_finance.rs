@@ -208,7 +208,7 @@ impl PriceProvider for YahooFinanceProvider {
         if currency == "GBp" {
             currency = "GBP".to_string();
             current_price /= 100.0;
-            for (_, price) in historical_prices.iter_mut() {
+            for price in historical_prices.values_mut() {
                 *price /= 100.0;
             }
             for (_, price) in daily_prices.iter_mut() {
