@@ -279,6 +279,61 @@ async fn test_real_yahoo_finance_api() {
 }
 
 #[test_log::test(tokio::test)]
+async fn test_real_yahoo_isin_fallback_api() {
+    use xmf::core::price::PriceProvider;
+    use xmf::providers::yahoo_finance::{YahooFinanceProvider, YahooIsinPriceProvider};
+    use xmf::store::KeyValueStore;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+    let base_url = "https://query1.finance.yahoo.com";
+    let cache = std::sync::Arc::new(KeyValueStore::new(temp_dir.path()));
+    let yahoo = std::sync::Arc::new(YahooFinanceProvider::new(base_url, cache));
+    let provider = YahooIsinPriceProvider::new(yahoo);
+
+    // HDFC Money Market Fund (Direct Growth) ISIN
+    let isin = "INF179KB1HU9";
+    info!(?isin, "Fetching price from Yahoo Finance via ISIN search");
+
+    let result = provider.fetch_price(isin).await;
+
+    match result {
+        Ok(price_result) => {
+            info!(?price_result, "Received successful price response");
+            assert!(price_result.price > 0.0, "Price should be positive");
+            assert_eq!(
+                price_result.currency, "INR",
+                "Currency should be Indian Rupee"
+            );
+            assert!(
+                !price_result.daily_prices.is_empty(),
+                "Daily prices should not be empty"
+            );
+
+            // Mutual fund meta quotes can lag the newest NAV; the provider
+            // must report a price consistent with the latest series close.
+            let (_, last_close) = price_result.daily_prices.last().unwrap();
+            assert!(
+                (price_result.price - last_close).abs() < 0.01,
+                "Price {} should match latest close {last_close}",
+                price_result.price
+            );
+
+            info!(
+                "Real Yahoo ISIN Response - {}: {} {} (as of {:?})",
+                isin,
+                price_result.price,
+                price_result.currency,
+                price_result.as_of_date()
+            );
+        }
+        Err(e) => {
+            error!("Yahoo ISIN API request failed: {e}\n{e:?}");
+            panic!("Yahoo ISIN API request failed: {e}");
+        }
+    }
+}
+
+#[test_log::test(tokio::test)]
 async fn test_real_amfi_api() {
     use xmf::core::price::PriceProvider;
     use xmf::providers::amfi_provider::AmfiProvider;

@@ -109,6 +109,47 @@ impl YahooFinanceProvider {
             cache,
         }
     }
+
+    /// Resolves a search query (e.g. an ISIN) to a Yahoo fund symbol.
+    ///
+    /// Prefers the first mutual fund quote; falls back to the first quote
+    /// marked as available on Yahoo Finance. The mapping is cached
+    /// persistently since symbols don't change.
+    #[instrument(name = "YahooSymbolSearch", skip(self), fields(query = %query))]
+    async fn search_fund_symbol(&self, query: &str) -> Result<String> {
+        let cache_key = format!("isin:{query}");
+        if let Some(cached) = self.cache.get(cache_key.as_bytes()).await {
+            return Ok(String::from_utf8_lossy(&cached).into_owned());
+        }
+
+        let url = format!("{}/v1/finance/search?q={}", self.base_url, query);
+        debug!("Searching fund symbol from {}", url);
+
+        let client = reqwest::Client::builder().user_agent("xmf/1.0").build()?;
+        let response = with_retry(|| async { client.get(&url).send().await }, 3, 500)
+            .await
+            .map_err(|e| anyhow!("Request error: {} for search query: {}", e, query))?;
+
+        let data: YahooSearchResponse = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse search response for {}: {}", query, e))?;
+
+        let symbol = data
+            .quotes
+            .iter()
+            .find(|q| q.quote_type.as_deref() == Some("MUTUALFUND"))
+            .or_else(|| data.quotes.iter().find(|q| q.is_yahoo_finance))
+            .and_then(|q| q.symbol.clone())
+            .ok_or_else(|| anyhow!("No fund symbol found for search query: {}", query))?;
+
+        // Cache the resolved mapping persistently (no TTL).
+        self.cache
+            .put(cache_key.as_bytes(), symbol.as_bytes(), None)
+            .await;
+
+        Ok(symbol)
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -142,9 +183,26 @@ struct PriceChartItem {
 struct PriceChartMeta {
     #[serde(alias = "regularMarketPrice")]
     regular_market_price: f64,
+    #[serde(default, alias = "regularMarketTime")]
+    regular_market_time: Option<i64>,
     currency: String,
     #[serde(alias = "longName")] // full name of the ticker
     short_name: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct YahooSearchResponse {
+    quotes: Vec<SearchQuote>,
+}
+
+#[derive(Deserialize, Debug)]
+struct SearchQuote {
+    #[serde(default)]
+    symbol: Option<String>,
+    #[serde(alias = "quoteType")]
+    quote_type: Option<String>,
+    #[serde(default, alias = "isYahooFinance")]
+    is_yahoo_finance: bool,
 }
 
 #[async_trait]
@@ -205,6 +263,27 @@ impl PriceProvider for YahooFinanceProvider {
             }
         }
 
+        // Reconcile the meta quote with the price series so that the
+        // reported price and its date always agree:
+        // - Meta newer than any valid close (e.g. a null latest candle):
+        //   extend the series, mirroring how the AMFI provider appends the
+        //   latest NAV.
+        // - Meta older than the newest close (mutual fund quotes can lag a
+        //   NAV day behind): prefer the series close.
+        // - Same day or missing timestamp: keep the meta price as-is.
+        if let Some((series_date, series_close)) = daily_prices.last() {
+            let meta_date = item
+                .meta
+                .regular_market_time
+                .and_then(|ts| Utc.timestamp_opt(ts, 0).single())
+                .map(|dt| dt.date_naive());
+            match meta_date {
+                Some(d) if d > *series_date => daily_prices.push((d, current_price)),
+                Some(d) if d < *series_date => current_price = *series_close,
+                _ => {}
+            }
+        }
+
         if currency == "GBp" {
             currency = "GBP".to_string();
             current_price /= 100.0;
@@ -234,6 +313,31 @@ impl PriceProvider for YahooFinanceProvider {
             .await;
 
         Ok(result)
+    }
+}
+
+// YahooIsinPriceProvider: resolves an ISIN to a Yahoo fund symbol via the
+// search endpoint and delegates price fetching to YahooFinanceProvider.
+pub struct YahooIsinPriceProvider {
+    yahoo: Arc<YahooFinanceProvider>,
+}
+
+impl YahooIsinPriceProvider {
+    pub fn new(yahoo: Arc<YahooFinanceProvider>) -> Self {
+        Self { yahoo }
+    }
+}
+
+#[async_trait]
+impl PriceProvider for YahooIsinPriceProvider {
+    #[instrument(
+        name = "YahooIsinPriceFetch",
+        skip(self),
+        fields(symbol = %identifier)
+    )]
+    async fn fetch_price(&self, identifier: &str) -> Result<PriceResult> {
+        let symbol = self.yahoo.search_fund_symbol(identifier).await?;
+        self.yahoo.fetch_price(&symbol).await
     }
 }
 
@@ -626,6 +730,235 @@ mod tests {
         for (_, price) in &result.daily_prices {
             assert!(price > &1.0); // Prices should be in pounds (GBP)
         }
+    }
+
+    #[tokio::test]
+    async fn test_stale_meta_quote_uses_newest_series_close() {
+        // Mutual fund style: the meta quote is one NAV day older than the
+        // last close in the series.
+        let now = chrono::Utc::now();
+        let ts_prev = (now - chrono::Duration::days(1)).timestamp();
+        let ts_curr = now.timestamp();
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 100.0,
+                            "regularMarketTime": {ts_prev},
+                            "currency": "INR"
+                        }},
+                        "timestamp": [{ts_prev}, {ts_curr}],
+                        "indicators": {{
+                            "quote": [{{ "close": [100.0, 101.5] }}]
+                        }}
+                    }}]
+                }}
+            }}"#
+        );
+
+        let mock_server = create_mock_server("FUND.BO", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("FUND.BO").await.unwrap();
+        assert_eq!(result.price, 101.5);
+        // The reported date must match the adopted series close.
+        assert_eq!(result.as_of_date(), Some(now.date_naive()));
+    }
+
+    #[tokio::test]
+    async fn test_same_day_meta_quote_is_kept() {
+        // Live equity style: meta quote is dated the same day as the last
+        // series close, so it wins.
+        let now = chrono::Utc::now();
+        let ts_prev = (now - chrono::Duration::days(1)).timestamp();
+        let ts_curr = now.timestamp();
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 105.0,
+                            "regularMarketTime": {ts_curr},
+                            "currency": "USD"
+                        }},
+                        "timestamp": [{ts_prev}, {ts_curr}],
+                        "indicators": {{
+                            "quote": [{{ "close": [100.0, 104.0] }}]
+                        }}
+                    }}]
+                }}
+            }}"#
+        );
+
+        let mock_server = create_mock_server("MSFT", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("MSFT").await.unwrap();
+        assert_eq!(result.price, 105.0);
+    }
+
+    #[tokio::test]
+    async fn test_meta_newer_than_series_extends_timeseries() {
+        // LSE style (e.g. IWDA.L): the newest candle has a null close, so
+        // the fresh meta quote must extend the series to keep the reported
+        // price and its date consistent.
+        let now = chrono::Utc::now();
+        let ts_prev = (now - chrono::Duration::days(1)).timestamp();
+        let ts_curr = now.timestamp();
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 147.71,
+                            "regularMarketTime": {ts_curr},
+                            "currency": "USD"
+                        }},
+                        "timestamp": [{ts_prev}, {ts_curr}],
+                        "indicators": {{
+                            "quote": [{{ "close": [147.39, null] }}]
+                        }}
+                    }}]
+                }}
+            }}"#
+        );
+
+        let mock_server = create_mock_server("IWDA.L", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("IWDA.L").await.unwrap();
+        assert_eq!(result.price, 147.71);
+        assert_eq!(result.as_of_date(), Some(now.date_naive()));
+        // The null close is skipped; the meta quote fills today's slot.
+        assert_eq!(result.daily_prices.len(), 2);
+        assert_eq!(
+            result.daily_prices.last(),
+            Some(&(now.date_naive(), 147.71))
+        );
+    }
+
+    // Tests for symbol search and YahooIsinPriceProvider
+    async fn mount_search_mock(mock_server: &MockServer, body: &str, times: Option<u64>) {
+        let mock = Mock::given(method("GET"))
+            .and(path("/v1/finance/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body));
+        if let Some(times) = times {
+            mock.up_to_n_times(times).mount(mock_server).await;
+        } else {
+            mock.mount(mock_server).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_search_fund_symbol_prefers_mutual_fund() {
+        let mock_server = MockServer::start().await;
+        mount_search_mock(
+            &mock_server,
+            r#"{"quotes":[
+                {"symbol":"FOO.BO","quoteType":"EQUITY","isYahooFinance":true},
+                {"symbol":"0P0000XW6V.BO","quoteType":"MUTUALFUND","isYahooFinance":true}
+            ]}"#,
+            None,
+        )
+        .await;
+
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let symbol = provider.search_fund_symbol("INF179KB1HU9").await.unwrap();
+        assert_eq!(symbol, "0P0000XW6V.BO");
+    }
+
+    #[tokio::test]
+    async fn test_search_fund_symbol_no_results() {
+        let mock_server = MockServer::start().await;
+        mount_search_mock(&mock_server, r#"{"quotes":[]}"#, None).await;
+
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.search_fund_symbol("UNKNOWN000").await;
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "No fund symbol found for search query: UNKNOWN000"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_search_fund_symbol_caches_mapping() {
+        let mock_server = MockServer::start().await;
+        // Only one request is allowed to succeed; a second network hit would
+        // return no results and fail the lookup.
+        mount_search_mock(
+            &mock_server,
+            r#"{"quotes":[{"symbol":"0P0000XW6V.BO","quoteType":"MUTUALFUND","isYahooFinance":true}]}"#,
+            Some(1),
+        )
+        .await;
+        mount_search_mock(&mock_server, r#"{"quotes":[]}"#, None).await;
+
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let first = provider.search_fund_symbol("INF179KB1HU9").await.unwrap();
+        let second = provider.search_fund_symbol("INF179KB1HU9").await.unwrap();
+        assert_eq!(first, "0P0000XW6V.BO");
+        assert_eq!(second, first);
+    }
+
+    #[tokio::test]
+    async fn test_isin_provider_resolves_and_fetches_price() {
+        let now = chrono::Utc::now();
+        let chart_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 6275.03,
+                            "currency": "INR",
+                            "instrumentType": "MUTUALFUND",
+                            "longName": "HDFC Money Market Dir Gr",
+                            "shortName": "HDFC Money Market Dir Gr"
+                        }},
+                        "timestamp": [{ts}],
+                        "indicators": {{
+                            "quote": [{{ "close": [6275.03] }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+            ts = now.timestamp(),
+        );
+
+        let mock_server = MockServer::start().await;
+        mount_search_mock(
+            &mock_server,
+            r#"{"quotes":[{"symbol":"0P0000XW6V.BO","quoteType":"MUTUALFUND","isYahooFinance":true}]}"#,
+            None,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v8/finance/chart/0P0000XW6V.BO"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(chart_response))
+            .mount(&mock_server)
+            .await;
+
+        let cache = Arc::new(MemoryCollection::new());
+        let yahoo = Arc::new(YahooFinanceProvider::new_with_collection(
+            &mock_server.uri(),
+            cache,
+        ));
+        let provider = YahooIsinPriceProvider::new(yahoo);
+
+        let result = provider.fetch_price("INF179KB1HU9").await.unwrap();
+        assert_eq!(result.price, 6275.03);
+        assert_eq!(result.currency, "INR");
+        assert_eq!(
+            result.short_name,
+            Some("HDFC Money Market Dir Gr".to_string())
+        );
     }
 
     // Tests for YahooCurrencyProvider (CurrencyRateProvider)

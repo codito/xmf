@@ -121,7 +121,7 @@ fn setup_providers(
     store: &Arc<KeyValueStore>,
 ) -> (
     Arc<providers::yahoo_finance::YahooFinanceProvider>,
-    Arc<providers::amfi_provider::AmfiProvider>,
+    Arc<dyn core::price::PriceProvider + Send + Sync>,
     Arc<providers::yahoo_finance::YahooCurrencyProvider>,
     Arc<providers::kuvera_provider::KuveraProvider>,
 ) {
@@ -137,15 +137,26 @@ fn setup_providers(
         .as_ref()
         .map_or("https://mf.captnemo.in", |p| &p.base_url);
 
-    (
-        Arc::new(providers::yahoo_finance::YahooFinanceProvider::new(
-            yahoo_base,
-            Arc::clone(store),
-        )),
+    let yahoo_provider = Arc::new(providers::yahoo_finance::YahooFinanceProvider::new(
+        yahoo_base,
+        Arc::clone(store),
+    ));
+
+    // Mutual fund NAVs: AMFI first, with Yahoo Finance as fallback when the
+    // upstream data is stale or unavailable.
+    let isin_provider = Arc::new(providers::fallback::FallbackPriceProvider::new(
         Arc::new(providers::amfi_provider::AmfiProvider::new(
             amfi_base,
             Arc::clone(store),
         )),
+        Arc::new(providers::yahoo_finance::YahooIsinPriceProvider::new(
+            Arc::clone(&yahoo_provider),
+        )),
+    ));
+
+    (
+        yahoo_provider,
+        isin_provider,
         Arc::new(providers::yahoo_finance::YahooCurrencyProvider::new(
             yahoo_base,
             Arc::clone(store),
