@@ -37,6 +37,10 @@ providers:
   amfi:
     base_url: "https://mf.captnemo.in"
 
+  # MoneyControl provider for Indian mutual fund NAVs (fresh daily data)
+  moneycontrol:
+    base_url: "https://api.moneycontrol.com"
+
 # Default currency for the application
 currency: "USD"
 # Optional: Custom path for cached data (defaults to system data directory)

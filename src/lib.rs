@@ -137,22 +137,33 @@ fn setup_providers(
         .as_ref()
         .map_or("https://mf.captnemo.in", |p| &p.base_url);
 
+    let mc_base = config
+        .providers
+        .moneycontrol
+        .as_ref()
+        .map_or("https://api.moneycontrol.com", |p| &p.base_url);
+
     let yahoo_provider = Arc::new(providers::yahoo_finance::YahooFinanceProvider::new(
         yahoo_base,
         Arc::clone(store),
     ));
 
-    // Mutual fund NAVs: AMFI first, with Yahoo Finance as fallback when the
-    // upstream data is stale or unavailable.
-    let isin_provider = Arc::new(providers::fallback::FallbackPriceProvider::new(
-        Arc::new(providers::amfi_provider::AmfiProvider::new(
-            amfi_base,
+    // ISIN provider: ordered composite — MoneyControl (fresh NAVs),
+    // Yahoo (deep 3Y/5Y/10Y history), AMFI (reliable fallback).
+    // Each fills missing historical_periods from the previous.
+    let isin_provider = Arc::new(providers::composite::CompositePriceProvider::new(vec![
+        Arc::new(providers::moneycontrol::MoneyControlProvider::new(
+            mc_base,
             Arc::clone(store),
         )),
         Arc::new(providers::yahoo_finance::YahooIsinPriceProvider::new(
             Arc::clone(&yahoo_provider),
         )),
-    ));
+        Arc::new(providers::amfi_provider::AmfiProvider::new(
+            amfi_base,
+            Arc::clone(store),
+        )),
+    ]));
 
     (
         yahoo_provider,

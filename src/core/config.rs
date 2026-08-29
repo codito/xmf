@@ -54,9 +54,15 @@ pub struct AmfiProviderConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct MoneyControlProviderConfig {
+    pub base_url: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ProvidersConfig {
     pub yahoo: Option<YahooProviderConfig>,
     pub amfi: Option<AmfiProviderConfig>,
+    pub moneycontrol: Option<MoneyControlProviderConfig>,
 }
 
 impl Default for ProvidersConfig {
@@ -67,6 +73,9 @@ impl Default for ProvidersConfig {
             }),
             amfi: Some(AmfiProviderConfig {
                 base_url: "https://mf.captnemo.in".to_string(),
+            }),
+            moneycontrol: Some(MoneyControlProviderConfig {
+                base_url: "https://api.moneycontrol.com".to_string(),
             }),
         }
     }

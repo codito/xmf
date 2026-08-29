@@ -19,16 +19,12 @@ fn find_closest_price(target_ts: i64, timestamps: &[i64], prices: &[Option<f64>]
         .and_then(|index| prices.get(index).and_then(|p| *p))
 }
 
-fn find_prev_close(timestamps: &[i64], closes: &[Option<f64>]) -> Option<f64> {
-    if timestamps.is_empty() || closes.is_empty() {
-        return None;
-    }
-
-    let reference_date = Utc
-        .timestamp_opt(*timestamps.last()?, 0)
-        .single()?
-        .date_naive();
-    for i in (0..timestamps.len() - 1).rev() {
+fn find_prev_close(
+    reference_date: chrono::NaiveDate,
+    timestamps: &[i64],
+    closes: &[Option<f64>],
+) -> Option<f64> {
+    for i in (0..timestamps.len()).rev() {
         if let Some(ts) = Utc.timestamp_opt(*timestamps.get(i)?, 0).single()
             && ts.date_naive() < reference_date
             && let Some(close) = closes.get(i).and_then(|c| *c)
@@ -50,15 +46,22 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             .and_then(|inds| inds.quote.first())
             .and_then(|q| q.close.as_ref()),
     ) {
+        // Use the last timestamp with a valid close as reference date.
+        // Yahoo includes placeholder today candles with close=null for Indian
+        // mutual funds; using timestamps.last() would reference today (null)
+        // and produce stale or incorrect historical values.
         let reference_date = match timestamps
-            .last()
-            .and_then(|ts| Utc.timestamp_opt(*ts, 0).single())
+            .iter()
+            .zip(closes.iter())
+            .rev()
+            .find(|(_, close)| close.is_some())
+            .and_then(|(ts, _)| Utc.timestamp_opt(*ts, 0).single())
         {
             Some(dt) => dt,
             None => return historical_prices,
         };
 
-        if let Some(prev_close) = find_prev_close(timestamps, closes) {
+        if let Some(prev_close) = find_prev_close(reference_date.date_naive(), timestamps, closes) {
             historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
 
@@ -303,12 +306,13 @@ impl PriceProvider for YahooFinanceProvider {
             short_name,
         };
 
-        // Cache with short-lived TTL (5 minutes) for stocks
+        // Cache with TTL aligned to daily refresh schedule
+        let ttl_seconds = crate::providers::util::seconds_until(19, 0).unwrap_or(24 * 60 * 60);
         self.cache
             .put(
                 symbol.as_bytes(),
                 &serde_json::to_vec(&result).unwrap(),
-                Some(Duration::from_secs(300)),
+                Some(Duration::from_secs(ttl_seconds)),
             )
             .await;
 
@@ -959,6 +963,64 @@ mod tests {
             result.short_name,
             Some("HDFC Money Market Dir Gr".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn test_isin_provider_null_candle_1d_from_valid_close() {
+        // Yahoo .BO funds expose a placeholder today candle with close=null
+        // until NAV publication. extract_historical_prices now uses the last
+        // valid close as reference, so 1D is correctly the prior day's NAV.
+        let now = chrono::Utc::now();
+        let ts_day_before = (now - chrono::Duration::days(2)).timestamp();
+        let ts_yesterday = (now - chrono::Duration::days(1)).timestamp();
+        let ts_today = now.timestamp();
+
+        let chart_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 6275.03,
+                            "regularMarketTime": {ts_day_before},
+                            "currency": "INR"
+                        }},
+                        "timestamp": [{ts_day_before}, {ts_yesterday}, {ts_today}],
+                        "indicators": {{
+                            "quote": [{{ "close": [6275.03, 6281.75, null] }}]
+                        }}
+                    }}]
+                }}
+            }}"#
+        );
+
+        let mock_server = MockServer::start().await;
+        mount_search_mock(
+            &mock_server,
+            r#"{"quotes":[{"symbol":"0P0000XW6V.BO","quoteType":"MUTUALFUND","isYahooFinance":true}]}"#,
+            None,
+        )
+        .await;
+        Mock::given(method("GET"))
+            .and(path("/v8/finance/chart/0P0000XW6V.BO"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(chart_response))
+            .mount(&mock_server)
+            .await;
+
+        let cache = Arc::new(MemoryCollection::new());
+        let yahoo = Arc::new(YahooFinanceProvider::new_with_collection(
+            &mock_server.uri(),
+            cache,
+        ));
+        let provider = YahooIsinPriceProvider::new(yahoo);
+
+        let result = provider.fetch_price("INF179KB1HU9").await.unwrap();
+        // After reconciliation price is yesterday's NAV; 1D must be day before.
+        assert_eq!(result.price, 6281.75);
+        assert_eq!(
+            result.historical_prices.get(&HistoricalPeriod::OneDay),
+            Some(&6275.03)
+        );
+        assert!((result.price - 6275.03).abs() > f64::EPSILON);
     }
 
     // Tests for YahooCurrencyProvider (CurrencyRateProvider)
