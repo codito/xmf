@@ -1,7 +1,7 @@
 use crate::core::cache::KeyValueCollection;
 use anyhow::Result;
 use async_trait::async_trait;
-use fjall::{Config, Keyspace, PartitionCreateOptions, PartitionHandle, PersistMode};
+use fjall::{Database, Keyspace, KeyspaceCreateOptions, PersistMode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -14,45 +14,52 @@ struct CacheEntry {
 }
 
 pub struct DiskStore {
-    keyspace: Arc<Keyspace>,
+    db: Arc<Database>,
 }
 
 impl DiskStore {
     pub fn new(path: &std::path::Path) -> Result<Self> {
-        let keyspace = Arc::new(Config::new(path).open()?);
-        Ok(Self { keyspace })
+        match Database::builder(path).open() {
+            Ok(db) => Ok(Self { db: Arc::new(db) }),
+            Err(e) => {
+                debug!(
+                    "Failed to open cache database (likely incompatible format), nuking: {}",
+                    e
+                );
+                std::fs::remove_dir_all(path)?;
+                let db = Database::builder(path).open()?;
+                Ok(Self { db: Arc::new(db) })
+            }
+        }
     }
 
     pub fn get_collection(&self, name: &str) -> Result<DiskCollection> {
         Ok(DiskCollection::new(
-            self.keyspace
-                .open_partition(name, PartitionCreateOptions::default())?,
+            self.db.keyspace(name, KeyspaceCreateOptions::default)?,
         ))
     }
 
     pub fn persist(&self) -> Result<()> {
-        self.keyspace.persist(PersistMode::SyncAll)?;
+        self.db.persist(PersistMode::SyncAll)?;
         Ok(())
     }
 
     pub fn clear(&self) -> Result<()> {
-        for partition_name in self.keyspace.list_partitions() {
-            let partition = self
-                .keyspace
-                .open_partition(&partition_name, PartitionCreateOptions::default())?;
-            self.keyspace.delete_partition(partition)?;
+        for name in self.db.list_keyspace_names() {
+            let ks = self.db.keyspace(&name, KeyspaceCreateOptions::default)?;
+            self.db.delete_keyspace(ks)?;
         }
         Ok(())
     }
 }
 
 pub struct DiskCollection {
-    partition: PartitionHandle,
+    keyspace: Keyspace,
 }
 
 impl DiskCollection {
-    pub fn new(partition: PartitionHandle) -> Self {
-        Self { partition }
+    pub fn new(keyspace: Keyspace) -> Self {
+        Self { keyspace }
     }
 }
 
@@ -60,7 +67,7 @@ impl DiskCollection {
 impl KeyValueCollection for DiskCollection {
     async fn get(&self, key: &[u8]) -> Option<Vec<u8>> {
         let res: Result<Option<Vec<u8>>> = (|| {
-            if let Some(value) = self.partition.get(key)? {
+            if let Some(value) = self.keyspace.get(key)? {
                 let entry: CacheEntry = serde_json::from_slice(&value)?;
                 if let Some(expires_at) = entry.expires_at
                     && SystemTime::now() > expires_at
@@ -69,7 +76,7 @@ impl KeyValueCollection for DiskCollection {
                         "Cache entry expired for key: {:?}",
                         String::from_utf8_lossy(key)
                     );
-                    self.partition.remove(key)?;
+                    self.keyspace.remove(key)?;
                     return Ok(None);
                 }
                 debug!("Cache HIT for key: {:?}", String::from_utf8_lossy(key));
@@ -95,7 +102,7 @@ impl KeyValueCollection for DiskCollection {
                 value: value.to_vec(),
                 expires_at,
             };
-            self.partition.insert(key, serde_json::to_vec(&entry)?)?;
+            self.keyspace.insert(key, serde_json::to_vec(&entry)?)?;
             debug!("Cache PUT for key: {:?}", String::from_utf8_lossy(key));
             Ok(())
         })();
@@ -105,7 +112,7 @@ impl KeyValueCollection for DiskCollection {
     }
 
     async fn remove(&self, key: &[u8]) {
-        if let Err(e) = self.partition.remove(key) {
+        if let Err(e) = self.keyspace.remove(key) {
             debug!("DiskCollection remove error: {}", e);
         }
     }
@@ -113,11 +120,12 @@ impl KeyValueCollection for DiskCollection {
     async fn clear(&self) {
         let res: Result<()> = (|| {
             let keys: Vec<_> = self
-                .partition
-                .keys()
+                .keyspace
+                .iter()
+                .map(|g| g.key())
                 .collect::<std::result::Result<_, _>>()?;
             for key in keys {
-                self.partition.remove(key)?;
+                self.keyspace.remove(key)?;
             }
             Ok(())
         })();
@@ -250,8 +258,8 @@ mod tests {
         let collection2 = store.get_collection("test2").unwrap();
         collection2.put(b"key2", b"value2", None).await;
 
-        assert_eq!(store.keyspace.list_partitions().len(), 2);
+        assert_eq!(store.db.keyspace_count(), 2);
         store.clear().unwrap();
-        assert_eq!(store.keyspace.list_partitions().len(), 0);
+        assert_eq!(store.db.keyspace_count(), 0);
     }
 }
