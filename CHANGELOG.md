@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/codito/xmf/compare/v0.2.1...v0.3.0) (2026-08-29)
+
+
+### Features
+
+* add MoneyControl provider and CompositePriceProvider for Indian MF NAVs ([4d8ee7c](https://github.com/codito/xmf/commit/4d8ee7c8919718cf7cd25a03d88784d44ddaf239))
+* custom categories for investments ([#61](https://github.com/codito/xmf/issues/61)) ([62bd419](https://github.com/codito/xmf/commit/62bd419e797cc6420aa1b046aebc2c33e538eb6a))
+* fall back to Yahoo Finance for stale or unavailable AMFI NAVs ([b6e986c](https://github.com/codito/xmf/commit/b6e986ca9dd781b963e71aa14098e9c72b5e3a23))
+* fix change for 1d, stream logs into data dir with rolling based on size, minor UI tweaks for readability. ([#110](https://github.com/codito/xmf/issues/110)) ([4b62ffc](https://github.com/codito/xmf/commit/4b62ffc8980531fedeacced463aafcd1a7576dc8))
+* show data-freshness superscripts in summary table ([0c97424](https://github.com/codito/xmf/commit/0c97424296ae92c396ef820816c04adc4853de3a))
+* support expense ratio for stock and ETF investments ([ca70633](https://github.com/codito/xmf/commit/ca7063389544a18bda08147f5179459b4389cfa2))
+
+
+### Bug Fixes
+
+* resolve clippy for_kv_map lint in yahoo finance provider ([687d500](https://github.com/codito/xmf/commit/687d50097464d86ca2ec17db8e1a6eaa8c63135a))
+* right align numbers for better readability ([#66](https://github.com/codito/xmf/issues/66)) ([c099bcd](https://github.com/codito/xmf/commit/c099bcdd0ff96c2b936c3f64d629355b06744bbf))
+
 ## [0.2.1](https://github.com/codito/xmf/compare/v0.2.0...v0.2.1) (2025-08-31)
 
 
