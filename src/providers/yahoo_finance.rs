@@ -35,7 +35,10 @@ fn find_prev_close(
     None
 }
 
-fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalPeriod, f64> {
+fn extract_historical_prices_with_reference(
+    chart_item: &PriceChartItem,
+    price_date: Option<chrono::NaiveDate>,
+) -> HashMap<HistoricalPeriod, f64> {
     let mut historical_prices = HashMap::new();
 
     if let (Some(timestamps), Some(closes)) = (
@@ -46,22 +49,29 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             .and_then(|inds| inds.quote.first())
             .and_then(|q| q.close.as_ref()),
     ) {
-        // Use the last timestamp with a valid close as reference date.
-        // Yahoo includes placeholder today candles with close=null for Indian
-        // mutual funds; using timestamps.last() would reference today (null)
-        // and produce stale or incorrect historical values.
-        let reference_date = match timestamps
-            .iter()
-            .zip(closes.iter())
-            .rev()
-            .find(|(_, close)| close.is_some())
-            .and_then(|(ts, _)| Utc.timestamp_opt(*ts, 0).single())
-        {
-            Some(dt) => dt,
-            None => return historical_prices,
+        // Reference date is the as-of date of the reported price (daily_prices.last()),
+        // not simply the last valid close. This correctly handles:
+        // - ETFs/stocks with a null today candle but live price (price date = today,
+        //   1D = yesterday)
+        // - MFs with a null today candle and stale meta (price date = yesterday,
+        //   1D = day before)
+        // Fallback to last valid close when price_date is unavailable.
+        let reference_date = match price_date {
+            Some(d) => d,
+            None => match timestamps
+                .iter()
+                .zip(closes.iter())
+                .rev()
+                .find(|(_, close)| close.is_some())
+                .and_then(|(ts, _)| Utc.timestamp_opt(*ts, 0).single())
+                .map(|dt| dt.date_naive())
+            {
+                Some(d) => d,
+                None => return historical_prices,
+            },
         };
 
-        if let Some(prev_close) = find_prev_close(reference_date.date_naive(), timestamps, closes) {
+        if let Some(prev_close) = find_prev_close(reference_date, timestamps, closes) {
             historical_prices.insert(HistoricalPeriod::OneDay, prev_close);
         }
 
@@ -77,7 +87,12 @@ fn extract_historical_prices(chart_item: &PriceChartItem) -> HashMap<HistoricalP
             // Logic is not perfect since we're not excluding weekends and other holidays.
             // Use approximation to avoid multiple API calls to the providers.
             let target_date = reference_date - period.to_duration();
-            if let Some(price) = find_closest_price(target_date.timestamp(), timestamps, closes)
+            let target_ts = target_date
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc()
+                .timestamp();
+            if let Some(price) = find_closest_price(target_ts, timestamps, closes)
                 && price > 0.0
             {
                 historical_prices.insert(period, price);
@@ -244,7 +259,6 @@ impl PriceProvider for YahooFinanceProvider {
         let mut currency = item.meta.currency.clone();
         let short_name = item.meta.short_name.clone();
         let mut daily_prices = Vec::new();
-        let mut historical_prices = extract_historical_prices(item);
 
         if let (Some(timestamps), Some(closes)) = (
             item.timestamp.as_ref(),
@@ -274,18 +288,25 @@ impl PriceProvider for YahooFinanceProvider {
         // - Meta older than the newest close (mutual fund quotes can lag a
         //   NAV day behind): prefer the series close.
         // - Same day or missing timestamp: keep the meta price as-is.
-        if let Some((series_date, series_close)) = daily_prices.last() {
+        if let Some((series_date, series_close)) = daily_prices.last().copied() {
             let meta_date = item
                 .meta
                 .regular_market_time
                 .and_then(|ts| Utc.timestamp_opt(ts, 0).single())
                 .map(|dt| dt.date_naive());
             match meta_date {
-                Some(d) if d > *series_date => daily_prices.push((d, current_price)),
-                Some(d) if d < *series_date => current_price = *series_close,
+                Some(d) if d > series_date => daily_prices.push((d, current_price)),
+                Some(d) if d < series_date => current_price = series_close,
                 _ => {}
             }
         }
+
+        // Historical prices must be computed after reconciliation so the
+        // reference date is the final price's as-of date. This fixes the
+        // off-by-one for 1D when today's candle is null but the price is
+        // live (ETF during market hours) vs. stale (MF before NAV).
+        let price_date = daily_prices.last().map(|(d, _)| *d);
+        let mut historical_prices = extract_historical_prices_with_reference(item, price_date);
 
         if currency == "GBp" {
             currency = "GBP".to_string();
@@ -843,6 +864,50 @@ mod tests {
             result.daily_prices.last(),
             Some(&(now.date_naive(), 147.71))
         );
+    }
+
+    #[tokio::test]
+    async fn test_etf_null_today_candle_1d_is_yesterday() {
+        // JUNIORBEES.NS-style: today's candle has close=null but meta price is
+        // live (today). 1D must be yesterday's close, not 2 days ago.
+        let now = chrono::Utc::now();
+        let ts_day_before = (now - chrono::Duration::days(2)).timestamp();
+        let ts_yesterday = (now - chrono::Duration::days(1)).timestamp();
+        let ts_today = now.timestamp();
+
+        let mock_response = format!(
+            r#"{{
+                "chart": {{
+                    "result": [{{
+                        "meta": {{
+                            "regularMarketPrice": 788.4,
+                            "regularMarketTime": {ts_today},
+                            "currency": "INR",
+                            "longName": "Nippon India ETF Junior BeES"
+                        }},
+                        "timestamp": [{ts_day_before}, {ts_yesterday}, {ts_today}],
+                        "indicators": {{
+                            "quote": [{{ "close": [793.86, 788.17, null] }}]
+                        }}
+                    }}]
+                }}
+            }}"#,
+        );
+
+        let mock_server = create_mock_server("JUNIORBEES.NS", &mock_response).await;
+        let cache = Arc::new(MemoryCollection::new());
+        let provider = YahooFinanceProvider::new_with_collection(&mock_server.uri(), cache);
+        let result = provider.fetch_price("JUNIORBEES.NS").await.unwrap();
+        // Price is today's live price
+        assert_eq!(result.price, 788.4);
+        // 1D must be yesterday's close (788.17), not day-before (793.86)
+        assert_eq!(
+            result.historical_prices.get(&HistoricalPeriod::OneDay),
+            Some(&788.17)
+        );
+        // Verify change is ~+0.03%, not negative
+        let change = (result.price - 788.17) / 788.17 * 100.0;
+        assert!(change > 0.0 && change < 0.1, "change was {change}");
     }
 
     // Tests for symbol search and YahooIsinPriceProvider
