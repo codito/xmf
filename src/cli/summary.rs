@@ -65,16 +65,13 @@ impl PortfolioValue {
             ui::header_cell("Investment"),
             ui::header_cell("Units"),
             ui::header_cell("Price"),
-            ui::header_cell(&format!("Value ({target_currency})")),
+            ui::header_cell(&format!("Value ({})", ui::currency_symbol(target_currency))),
             ui::header_cell("Weight"),
         ]);
 
         for investment in &self.investments {
-            let currency = investment
-                .value_currency
-                .as_deref()
-                .unwrap_or("N/A")
-                .to_string();
+            let currency =
+                ui::currency_symbol(investment.value_currency.as_deref().unwrap_or("N/A"));
 
             let name_display = if let Some(name) = &investment.short_name {
                 name.clone()
@@ -88,7 +85,7 @@ impl PortfolioValue {
             let has_any_superscript = !stale_dates.is_empty();
             let current_price = ui::format_cell(investment.price, |opt| match opt {
                 Some(p) => {
-                    let mut s = format!("{p:.2}{currency}");
+                    let mut s = format!("{p:.2} {currency}");
                     if let Some(sup) = sup {
                         s.push_str(sup);
                     } else if has_any_superscript {
@@ -138,7 +135,10 @@ impl PortfolioValue {
         // Total value at bottom
         output.push_str(&format!(
             "\n\nTotal Value ({}): {}",
-            ui::style_text(target_currency, ui::StyleType::TotalLabel),
+            ui::style_text(
+                ui::currency_symbol(target_currency),
+                ui::StyleType::TotalLabel
+            ),
             ui::style_text(&total_converted_value, total_style_type)
         ));
 
@@ -256,7 +256,10 @@ pub async fn run(
             .map(|(_, w)| w as usize)
             .unwrap_or(80);
         println!("\n{}", "=".repeat(term_width));
-        let total_str = format!("Grand Total ({target_currency}): {grand_total:.2}");
+        let total_str = format!(
+            "Grand Total ({}): {grand_total:.2}",
+            ui::currency_symbol(target_currency)
+        );
         let styled_total = style(&total_str).bold().green();
         println!("{styled_total:>term_width$}");
     }

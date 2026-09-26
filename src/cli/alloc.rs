@@ -169,7 +169,7 @@ fn display_allocation_table(
         ui::header_cell("Category"),
         ui::header_cell("Investment"),
         ui::header_cell("Allocation"),
-        ui::header_cell(&format!("Value ({})", target_currency)),
+        ui::header_cell(&format!("Value ({})", ui::currency_symbol(target_currency))),
     ]);
 
     // Calculate portfolio total
@@ -251,7 +251,10 @@ fn display_allocation_table(
         println!(
             "\n{}: {:.2}\n",
             ui::style_text(
-                &format!("Portfolio Total Value ({})", target_currency),
+                &format!(
+                    "Portfolio Total Value ({})",
+                    ui::currency_symbol(target_currency)
+                ),
                 ui::StyleType::TotalLabel
             ),
             total

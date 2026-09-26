@@ -82,6 +82,19 @@ pub fn change_cell(change: f64) -> Cell {
     }
 }
 
+/// Maps a currency code to its display symbol for common denominations.
+/// Unknown codes fall back to the code itself, preserving today's style.
+pub fn currency_symbol(code: &str) -> &str {
+    match code.trim().to_ascii_uppercase().as_str() {
+        "USD" => "$",
+        "EUR" => "€",
+        "GBP" => "£",
+        "INR" => "₹",
+        "JPY" => "¥",
+        _ => code,
+    }
+}
+
 /// Creates a cell for "N/A" values, with error-specific styling.
 pub fn na_cell(has_error: bool) -> Cell {
     let color = if has_error {
@@ -147,5 +160,28 @@ mod tests {
     fn test_format_optional_cell_none() {
         let cell = format_optional_cell::<f64>(None, |_| unreachable!());
         assert_eq!(cell.content(), "N/A");
+    }
+
+    #[test]
+    fn test_currency_symbol_common_codes() {
+        assert_eq!(currency_symbol("USD"), "$");
+        assert_eq!(currency_symbol("EUR"), "€");
+        assert_eq!(currency_symbol("GBP"), "£");
+        assert_eq!(currency_symbol("INR"), "₹");
+        assert_eq!(currency_symbol("JPY"), "¥");
+    }
+
+    #[test]
+    fn test_currency_symbol_case_insensitive() {
+        assert_eq!(currency_symbol("usd"), "$");
+        assert_eq!(currency_symbol("inr"), "₹");
+        assert_eq!(currency_symbol("gbp"), "£");
+    }
+
+    #[test]
+    fn test_currency_symbol_unknown_falls_back_to_code() {
+        assert_eq!(currency_symbol("CAD"), "CAD");
+        assert_eq!(currency_symbol("CHF"), "CHF");
+        assert_eq!(currency_symbol("N/A"), "N/A");
     }
 }
