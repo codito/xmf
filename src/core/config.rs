@@ -27,6 +27,10 @@ pub struct FixedDepositInvestment {
     pub value: f64,
     pub currency: Option<String>,
     pub category: Option<String>,
+    /// Annual rate of interest in percent (e.g. 7.5 for 7.5% p.a.).
+    /// Used by `xmf returns` for weighted portfolio returns.
+    #[serde(default)]
+    pub rate_of_interest: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -150,6 +154,7 @@ portfolios:
       - name: "FD with Bank of Rust"
         value: 50000.0
         currency: "INR"
+        rate_of_interest: 7.25
       - name: "FD with Govt of Rust"
         value: 50000.0
         category: gilt
@@ -196,6 +201,7 @@ currency: "USD"
             assert_eq!(fd.name, "FD with Bank of Rust");
             assert_eq!(fd.value, 50000.0);
             assert_eq!(fd.currency.as_deref(), Some("INR"));
+            assert_eq!(fd.rate_of_interest, Some(7.25));
         } else {
             panic!("Expected a fixed deposit investment");
         }
@@ -209,6 +215,7 @@ currency: "USD"
             assert_eq!(fd.name, "FD without Currency");
             assert_eq!(fd.value, 30000.0);
             assert!(fd.currency.is_none());
+            assert!(fd.rate_of_interest.is_none());
         } else {
             panic!("Expected a fixed deposit investment");
         }

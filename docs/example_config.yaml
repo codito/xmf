@@ -26,6 +26,7 @@ portfolios:
       - name: "Bank FD"
         value: 50000.0
         currency: "INR" # Optional - defaults to global currency if omitted
+        rate_of_interest: 7.5 # Optional - annual interest rate in %, used by `xmf returns`
 
 # Configuration for data providers
 providers:

@@ -370,6 +370,7 @@ mod tests {
                     value: 5000.0,
                     currency: Some("USD".to_string()),
                     category: None,
+                    rate_of_interest: None,
                 }),
             ],
         }];

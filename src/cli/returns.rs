@@ -40,6 +40,13 @@ struct PortfolioRollingReturnResult {
     portfolio_stats: Option<RollingReturnStats>,
 }
 
+const RETURN_PERIODS: [HistoricalPeriod; 4] = [
+    HistoricalPeriod::OneYear,
+    HistoricalPeriod::ThreeYears,
+    HistoricalPeriod::FiveYears,
+    HistoricalPeriod::TenYears,
+];
+
 pub async fn run(
     portfolios: &[Portfolio],
     symbol_provider: &(dyn PriceProvider + Send + Sync),
@@ -134,7 +141,7 @@ pub async fn run(
                 Investment::MutualFund(mf) => {
                     investments_to_fetch.insert(mf.isin.clone(), isin_provider);
                 }
-                Investment::FixedDeposit(_) => {} // Not relevant for returns
+                Investment::FixedDeposit(_) => {} // No price data to fetch
             }
         }
     }
@@ -207,8 +214,40 @@ async fn calculate_portfolio_returns(
     let mut portfolio_cagrs: BTreeMap<HistoricalPeriod, f64> = BTreeMap::new();
     let mut period_contributors: BTreeMap<HistoricalPeriod, f64> = BTreeMap::new();
 
+    // Fixed deposits have no price series; their configured interest rate is
+    // used as the annual return instead.
+    let fd_rates: HashMap<&str, f64> = portfolio
+        .investments
+        .iter()
+        .filter_map(|investment| match investment {
+            Investment::FixedDeposit(fd) => {
+                fd.rate_of_interest.map(|rate| (fd.name.as_str(), rate))
+            }
+            _ => None,
+        })
+        .collect();
+
     for holding in &holdings.investments {
         if holding.units.is_none() {
+            if let Some(rate) = fd_rates.get(holding.identifier.as_str())
+                && holding.error.is_none()
+                && let Some(weight) = holding.weight
+            {
+                let cagrs = RETURN_PERIODS
+                    .iter()
+                    .map(|period| (*period, *rate))
+                    .collect();
+                for &period in &RETURN_PERIODS {
+                    *portfolio_cagrs.entry(period).or_insert(0.0) += rate * (weight / 100.0);
+                    *period_contributors.entry(period).or_insert(0.0) += weight / 100.0;
+                }
+                investment_returns.push(ReturnResult {
+                    identifier: holding.identifier.clone(),
+                    short_name: holding.short_name.clone(),
+                    cagrs,
+                    error: None,
+                });
+            }
             continue;
         }
 
@@ -269,14 +308,8 @@ async fn calculate_portfolio_returns(
 
 fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod, f64>> {
     let mut cagrs = BTreeMap::new();
-    let periods = [
-        HistoricalPeriod::OneYear,
-        HistoricalPeriod::ThreeYears,
-        HistoricalPeriod::FiveYears,
-        HistoricalPeriod::TenYears,
-    ];
 
-    for &period in &periods {
+    for &period in &RETURN_PERIODS {
         if let Some(historical_price) = price_data.historical_prices.get(&period) {
             if *historical_price <= 0.0 || price_data.price <= 0.0 {
                 continue;
@@ -325,15 +358,9 @@ fn calculate_cagr(price_data: &PriceResult) -> Result<BTreeMap<HistoricalPeriod,
 
 fn display_return_results(result: &PortfolioReturnResult) {
     let mut table = ui::new_styled_table();
-    let periods = [
-        HistoricalPeriod::OneYear,
-        HistoricalPeriod::ThreeYears,
-        HistoricalPeriod::FiveYears,
-        HistoricalPeriod::TenYears,
-    ];
 
     let mut header = vec![ui::header_cell("Investment")];
-    for period in &periods {
+    for period in &RETURN_PERIODS {
         header.push(ui::header_cell(&period.to_string()));
     }
     table.set_header(header);
@@ -346,7 +373,7 @@ fn display_return_results(result: &PortfolioReturnResult) {
         };
         let mut row_cells = vec![Cell::new(name_display)];
 
-        for period in &periods {
+        for period in &RETURN_PERIODS {
             let cell = match result.cagrs.get(period) {
                 Some(cagr) => ui::change_cell(*cagr),
                 None => ui::na_cell(result.error.is_some()),
@@ -359,7 +386,7 @@ fn display_return_results(result: &PortfolioReturnResult) {
     if !result.portfolio_cagrs.is_empty() && result.investment_returns.len() > 1 {
         let mut total_row_cells =
             vec![Cell::new("Portfolio Weighted").add_attribute(Attribute::Bold)];
-        for period in &periods {
+        for period in &RETURN_PERIODS {
             let cell = match result.portfolio_cagrs.get(period) {
                 Some(cagr) => ui::change_cell(*cagr),
                 None => ui::na_cell(false),
@@ -526,7 +553,7 @@ fn display_rolling_return_results(result: &PortfolioRollingReturnResult, period:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::config::StockInvestment;
+    use crate::core::config::{FixedDepositInvestment, StockInvestment};
     use crate::core::currency::CurrencyRateProvider;
     use crate::core::price::{HistoricalPeriod, PriceResult};
     use anyhow::Result;
@@ -675,6 +702,102 @@ mod tests {
         let result =
             calculate_portfolio_returns(&portfolio, &price_results, &currency_provider, "USD")
                 .await;
+        assert!((result.portfolio_cagrs[&HistoricalPeriod::OneYear] - 25.0).abs() < 0.1);
+    }
+
+    fn fixed_deposit(rate_of_interest: Option<f64>) -> Investment {
+        Investment::FixedDeposit(FixedDepositInvestment {
+            name: "Bank FD".to_string(),
+            value: 1000.0, // 50% weight alongside a 1000 stock position
+            currency: Some("USD".to_string()),
+            category: None,
+            rate_of_interest,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_fixed_deposit_rate_included_in_weighted_returns() {
+        let portfolio = Portfolio {
+            name: "Mixed".to_string(),
+            investments: vec![
+                Investment::Stock(StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0, // value 1000, 50% weight
+                    category: None,
+                    expense_ratio: None,
+                }),
+                fixed_deposit(Some(8.0)),
+            ],
+        };
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "USD".to_string(),
+                short_name: Some("Apple".to_string()),
+                historical_prices: HashMap::from([(HistoricalPeriod::OneYear, 80.0)]), // +25%
+                daily_prices: Vec::new(),
+            }),
+        );
+
+        let result =
+            calculate_portfolio_returns(&portfolio, &price_results, &MockCurrencyProvider, "USD")
+                .await;
+
+        let fd = result
+            .investment_returns
+            .iter()
+            .find(|r| r.identifier == "Bank FD")
+            .expect("fixed deposit row missing");
+        assert_eq!(fd.cagrs.len(), RETURN_PERIODS.len());
+        for period in &RETURN_PERIODS {
+            assert!((fd.cagrs[period] - 8.0).abs() < 0.001);
+        }
+
+        // 50/50 weights with a 25% stock: (25 + 8) / 2 = 16.5% for 1Y.
+        assert!((result.portfolio_cagrs[&HistoricalPeriod::OneYear] - 16.5).abs() < 0.1);
+        // The stock has no 10Y data, so only the FD contributes: 8%.
+        assert!((result.portfolio_cagrs[&HistoricalPeriod::TenYears] - 8.0).abs() < 0.1);
+    }
+
+    #[tokio::test]
+    async fn test_fixed_deposit_without_rate_is_skipped() {
+        let portfolio = Portfolio {
+            name: "Mixed".to_string(),
+            investments: vec![
+                Investment::Stock(StockInvestment {
+                    symbol: "AAPL".to_string(),
+                    units: 10.0,
+                    category: None,
+                    expense_ratio: None,
+                }),
+                fixed_deposit(None),
+            ],
+        };
+        let mut price_results = HashMap::new();
+        price_results.insert(
+            "AAPL".to_string(),
+            Ok(PriceResult {
+                price: 100.0,
+                currency: "USD".to_string(),
+                short_name: Some("Apple".to_string()),
+                historical_prices: HashMap::from([(HistoricalPeriod::OneYear, 80.0)]), // +25%
+                daily_prices: Vec::new(),
+            }),
+        );
+
+        let result =
+            calculate_portfolio_returns(&portfolio, &price_results, &MockCurrencyProvider, "USD")
+                .await;
+
+        assert!(
+            result
+                .investment_returns
+                .iter()
+                .all(|r| r.identifier != "Bank FD")
+        );
+        // Unchanged from before: normalized over the stock only.
         assert!((result.portfolio_cagrs[&HistoricalPeriod::OneYear] - 25.0).abs() < 0.1);
     }
 }
